@@ -6,8 +6,8 @@ accounts:
     enabled: true
     whatsapp_target: "${WHATSAPP_TARGET}"
     mt5_backend: auto
-    bridge_host: localhost
-    bridge_port: 18813
+    bridge_host: "${MT5_BRIDGE_HOST}"
+    bridge_port: "${MT5_BRIDGE_PORT}"
     terminal_path: null
 
   # Add more accounts — one bridge_port / terminal per MT5 instance:

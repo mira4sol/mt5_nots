@@ -4,11 +4,26 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from mt5_trigger.config import enabled_accounts, load_config
-from mt5_trigger.mt5.backend import resolve_backend
+from mt5_trigger.mt5.backend import _port_open, resolve_backend
 from mt5_trigger.mt5.client import MT5Client
+
+
+def _apply_env_overrides(account):
+    """Apply MT5_* env vars from .env over account config."""
+    updates: dict = {}
+    if os.environ.get("MT5_BACKEND"):
+        updates["mt5_backend"] = os.environ["MT5_BACKEND"]
+    if os.environ.get("MT5_BRIDGE_HOST"):
+        updates["bridge_host"] = os.environ["MT5_BRIDGE_HOST"]
+    if os.environ.get("MT5_BRIDGE_PORT"):
+        updates["bridge_port"] = int(os.environ["MT5_BRIDGE_PORT"])
+    if updates:
+        return account.model_copy(update=updates)
+    return account
 
 
 def _print_positions(client: MT5Client) -> None:
@@ -76,6 +91,8 @@ def main() -> int:
             return 1
         account = matches[0]
 
+    account = _apply_env_overrides(account)
+
     if args.backend:
         account = account.model_copy(update={"mt5_backend": args.backend})
 
@@ -85,9 +102,29 @@ def main() -> int:
     print(f"Server   : {account.server}")
     print(f"Backend  : {backend}")
     if backend == "bridge":
-        print(f"Bridge   : {account.bridge_host}:{account.bridge_port}")
+        reachable = _port_open(account.bridge_host, account.bridge_port)
+        print(f"Bridge   : {account.bridge_host}:{account.bridge_port} ({'reachable' if reachable else 'NOT reachable'})")
+    if backend == "mock":
+        print("WARNING  : Using mock backend — not a real MT5 server. Omit --backend mock for real connection.")
     if account.terminal_path:
         print(f"Terminal : {account.terminal_path}")
+
+    if backend == "mock" and args.backend != "mock":
+        print("ERROR: Refusing mock backend. Use --backend mock only for offline tests.", file=sys.stderr)
+        return 1
+
+    if backend == "bridge" and not _port_open(account.bridge_host, account.bridge_port):
+        print(
+            f"ERROR: MT5 bridge not reachable at {account.bridge_host}:{account.bridge_port}.\n"
+            "Start MT5 terminal + bridge, then retry.\n"
+            "  Mac: mt5-mac-bridge serve\n"
+            "  Remote: ssh -L {port}:127.0.0.1:{port} user@vps\n"
+            "Check MT5_BRIDGE_HOST / MT5_BRIDGE_PORT in .env match your bridge.".format(
+                port=account.bridge_port
+            ),
+            file=sys.stderr,
+        )
+        return 1
 
     if not account.login or not account.password:
         print(

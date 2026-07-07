@@ -53,9 +53,8 @@ def resolve_backend(account: AccountConfig) -> Mt5Backend:
         return backend
     if platform.system() == "Windows":
         return "native"
-    if _port_open(account.bridge_host, account.bridge_port):
-        return "bridge"
-    return "mock"
+    # Mac/Linux: always use bridge for auto. Mock is opt-in only (mt5_backend: mock).
+    return "bridge"
 
 
 def load_mt5_module(backend: Mt5Backend, account: AccountConfig) -> Any:
