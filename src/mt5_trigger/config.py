@@ -126,4 +126,26 @@ def load_config(
 
 
 def enabled_accounts(config: AppConfig) -> list[AccountConfig]:
-    return [a for a in config.accounts if a.enabled]
+    return [normalize_account_config(a) for a in config.accounts if a.enabled]
+
+
+# Aliases users often put in MT5_BACKEND by mistake
+_BACKEND_ALIASES: dict[str, tuple[str, str | None]] = {
+    "mt5linux": ("bridge", "mt5linux"),
+    "mac-bridge": ("bridge", "mac-bridge"),
+    "mt5-mac-bridge": ("bridge", "mac-bridge"),
+}
+
+
+def normalize_account_config(account: AccountConfig) -> AccountConfig:
+    """Map common mistakes like MT5_BACKEND=mt5linux → bridge + bridge_client=mt5linux."""
+    alias = _BACKEND_ALIASES.get(account.mt5_backend)
+    if not alias:
+        return account
+    backend, client = alias
+    bridge_client = account.bridge_client
+    if bridge_client == "auto" and client:
+        bridge_client = client  # type: ignore[assignment]
+    return account.model_copy(
+        update={"mt5_backend": backend, "bridge_client": bridge_client}
+    )

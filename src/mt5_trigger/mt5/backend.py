@@ -120,7 +120,10 @@ def load_mt5_module(backend: Mt5Backend, account: AccountConfig) -> Any:
 
         return mt5
 
-    raise ValueError(f"Unknown MT5 backend: {backend}")
+    raise ValueError(
+        f"Unknown MT5 backend: {backend!r}. "
+        "Use MT5_BACKEND=bridge with MT5_BRIDGE_CLIENT=mt5linux (not MT5_BACKEND=mt5linux)."
+    )
 
 
 def bridge_protocol_hint(error: Exception) -> str | None:

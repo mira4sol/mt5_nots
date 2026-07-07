@@ -7,7 +7,12 @@ import argparse
 import os
 import sys
 
-from mt5_trigger.config import enabled_accounts, load_config
+from mt5_trigger.config import (
+    _BACKEND_ALIASES,
+    enabled_accounts,
+    load_config,
+    normalize_account_config,
+)
 from mt5_trigger.mt5.backend import _port_open, resolve_backend, resolve_bridge_client
 from mt5_trigger.mt5.client import MT5Client
 
@@ -16,7 +21,14 @@ def _apply_env_overrides(account):
     """Apply MT5_* env vars from .env over account config."""
     updates: dict = {}
     if os.environ.get("MT5_BACKEND"):
-        updates["mt5_backend"] = os.environ["MT5_BACKEND"]
+        backend = os.environ["MT5_BACKEND"]
+        if backend in _BACKEND_ALIASES:
+            mapped, client = _BACKEND_ALIASES[backend]
+            updates["mt5_backend"] = mapped
+            if not os.environ.get("MT5_BRIDGE_CLIENT"):
+                updates["bridge_client"] = client
+        else:
+            updates["mt5_backend"] = backend
     if os.environ.get("MT5_BRIDGE_HOST"):
         updates["bridge_host"] = os.environ["MT5_BRIDGE_HOST"]
     if os.environ.get("MT5_BRIDGE_PORT"):
@@ -26,8 +38,8 @@ def _apply_env_overrides(account):
     if os.environ.get("MT5_TERMINAL_PATH"):
         updates["terminal_path"] = os.environ["MT5_TERMINAL_PATH"]
     if updates:
-        return account.model_copy(update=updates)
-    return account
+        account = account.model_copy(update=updates)
+    return normalize_account_config(account)
 
 
 def _print_positions(client: MT5Client) -> None:

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from mt5_trigger.config import AccountConfig
+from mt5_trigger.config import AccountConfig, normalize_account_config
 from mt5_trigger.mt5.backend import (
     ORDER_TYPE_LABELS,
     PENDING_ORDER_TYPES,
@@ -71,8 +71,8 @@ class SymbolTick:
 
 class MT5Client:
     def __init__(self, account: AccountConfig) -> None:
-        self.account = account
-        self.backend = resolve_backend(account)
+        self.account = normalize_account_config(account)
+        self.backend = resolve_backend(self.account)
         self._mt5: Any = None
         self._connected = False
 
