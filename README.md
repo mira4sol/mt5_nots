@@ -95,22 +95,42 @@ Pick **one** path for your OS.
 3. Run `make install-native` if not already done
 4. Leave `mt5_backend: auto` (auto-detects native on Windows)
 
-#### macOS / Linux (local bridge)
+#### Linux VPS (mt5linux — recommended)
 
-MetaTrader5's Python API is Windows-only. On Mac/Linux you run MT5 under Wine and connect via a bridge:
+Most Linux setups use [mt5linux](https://github.com/lucas-campagna/mt5linux) RPyC server. **Do not use mt5-mac-bridge** against an mt5linux server — they speak different protocols (`invalid message type` error).
 
-1. Install MT5 terminal (MT5.app on Mac, or Wine on Linux)
-2. Log into your account in the terminal
-3. Start the bridge (example with [mt5-mac-bridge](https://pypi.org/project/mt5-mac-bridge/)):
+1. Install Wine + MT5 terminal, log in with investor password
+2. Start the mt5linux bridge server:
    ```bash
-   mt5-mac-bridge serve   # listens on port 18813 by default
+   python -m mt5linux /path/to/wine/python.exe --port 18812
    ```
-4. In `accounts.yaml` set:
-   ```yaml
-   mt5_backend: bridge
-   bridge_host: localhost
-   bridge_port: 18813
+3. Install client library on the monitor venv:
+   ```bash
+   make install-linux   # pip install mt5linux
    ```
+4. In `.env`:
+   ```env
+   MT5_BRIDGE_CLIENT=mt5linux
+   MT5_BRIDGE_HOST=127.0.0.1
+   MT5_BRIDGE_PORT=18812
+   MT5_TERMINAL_PATH=C:\Program Files\Valetax Global MT5 Terminal\terminal64.exe
+   ```
+
+#### macOS (mt5-mac-bridge)
+
+1. Install MT5.app and log in
+2. `make install-bridge`
+3. Start bridge: `mt5-mac-bridge serve`
+4. In `.env`: `MT5_BRIDGE_CLIENT=mac-bridge`
+
+```yaml
+# accounts.yaml (via .env interpolation)
+mt5_backend: bridge
+bridge_client: mt5linux   # or mac-bridge on Mac
+bridge_host: 127.0.0.1
+bridge_port: 18812
+terminal_path: "${MT5_TERMINAL_PATH}"
+```
 
 #### Remote MT5 (Windows VPS)
 
@@ -238,8 +258,10 @@ make health
 | `MT5_SERVER` | Yes | Broker server name |
 | `WHATSAPP_TARGET` | Yes | E.164 phone (`+1...`) or group JID (`...@g.us`) |
 | `MT5_BACKEND` | No | `auto` (default), `native`, `bridge`, or `mock` |
+| `MT5_BRIDGE_CLIENT` | No | `auto`, `mt5linux` (Linux VPS), or `mac-bridge` (Mac) |
 | `MT5_BRIDGE_HOST` | No | Default bridge host (per-account override in YAML) |
 | `MT5_BRIDGE_PORT` | No | Default bridge port |
+| `MT5_TERMINAL_PATH` | No | Wine path to `terminal64.exe` (required for mt5linux) |
 
 ### Account settings (`config/accounts.yaml`)
 
@@ -250,9 +272,10 @@ make health
 | `enabled` | `true` to monitor, `false` to skip |
 | `whatsapp_target` | Override recipient for this account |
 | `mt5_backend` | `auto`, `native`, `bridge`, or `mock` |
-| `bridge_host` | IP/hostname of MT5 bridge (`localhost` or VPS IP) |
+| `bridge_client` | `auto`, `mt5linux`, or `mac-bridge` |
+| `bridge_host` | IP/hostname of MT5 bridge (`127.0.0.1` or VPS IP) |
 | `bridge_port` | RPyC port (one per MT5 terminal) |
-| `terminal_path` | Windows only: path to `terminal64.exe` |
+| `terminal_path` | Wine path to `terminal64.exe` (mt5linux on Linux) |
 
 ### App settings (`config/settings.yaml`)
 
@@ -295,6 +318,7 @@ Near-trigger alerts are suppressed when the forex market is closed or in a rollo
 | `login/password empty` | Set `MT5_LOGIN` and `MT5_PASSWORD` in `.env` |
 | Windows: initialize failed | MT5 terminal must be running; use investor password |
 | Mac/Linux: connection refused | Start MT5 + bridge; check `bridge_host` / `bridge_port` |
+| `invalid message type` | Wrong bridge client — set `MT5_BRIDGE_CLIENT=mt5linux` and `pip install mt5linux` |
 | Remote VPS | SSH tunnel or set `bridge_host` to VPS IP; ensure firewall allows port |
 
 ### No near-trigger alerts

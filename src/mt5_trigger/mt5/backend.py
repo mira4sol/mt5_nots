@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 import platform
 import socket
-from typing import Any
+from typing import Any, Literal
 
-from mt5_trigger.config import AccountConfig, Mt5Backend
+from mt5_trigger.config import AccountConfig, Mt5Backend, BridgeClient
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +47,31 @@ def _port_open(host: str, port: int, timeout: float = 0.5) -> bool:
         return False
 
 
+def _bridge_host(host: str) -> str:
+    if host in ("localhost", ""):
+        return "127.0.0.1"
+    return host
+
+
 def resolve_backend(account: AccountConfig) -> Mt5Backend:
     backend = account.mt5_backend
     if backend != "auto":
         return backend
     if platform.system() == "Windows":
         return "native"
-    # Mac/Linux: always use bridge for auto. Mock is opt-in only (mt5_backend: mock).
     return "bridge"
+
+
+def resolve_bridge_client(account: AccountConfig) -> BridgeClient:
+    client = account.bridge_client
+    if client != "auto":
+        return client
+    try:
+        import mt5linux  # noqa: F401
+
+        return "mt5linux"
+    except ImportError:
+        return "mac-bridge"
 
 
 def load_mt5_module(backend: Mt5Backend, account: AccountConfig) -> Any:
@@ -70,11 +87,30 @@ def load_mt5_module(backend: Mt5Backend, account: AccountConfig) -> Any:
             return MockMT5()
 
     if backend == "bridge":
+        bridge_client = resolve_bridge_client(account)
+        if bridge_client == "mt5linux":
+            from mt5linux import MetaTrader5
+
+            logger.info(
+                "Using mt5linux bridge at %s:%s",
+                account.bridge_host,
+                account.bridge_port,
+            )
+            return MetaTrader5(
+                host=_bridge_host(account.bridge_host),
+                port=account.bridge_port,
+            )
+
         import mt5_mac_bridge as mt5b
 
+        logger.info(
+            "Using mt5-mac-bridge at %s:%s",
+            account.bridge_host,
+            account.bridge_port,
+        )
         mt5b.init(
             backend="bridge",
-            host=account.bridge_host,
+            host=_bridge_host(account.bridge_host),
             port=account.bridge_port,
         )
         return mt5b
@@ -85,3 +121,15 @@ def load_mt5_module(backend: Mt5Backend, account: AccountConfig) -> Any:
         return mt5
 
     raise ValueError(f"Unknown MT5 backend: {backend}")
+
+
+def bridge_protocol_hint(error: Exception) -> str | None:
+    msg = str(error).lower()
+    if "invalid message type" in msg:
+        return (
+            "Bridge protocol mismatch: port is open but the client library does not match "
+            "your bridge server. If you use `python -m mt5linux` or mt5linux RPyC server, "
+            "set bridge_client: mt5linux in accounts.yaml or MT5_BRIDGE_CLIENT=mt5linux in .env "
+            "and run: pip install mt5linux"
+        )
+    return None

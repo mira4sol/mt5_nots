@@ -1,4 +1,4 @@
-.PHONY: help install install-dev install-prod install-native install-bridge setup \
+.PHONY: help install install-dev install-prod install-native install-bridge install-linux setup \
         test test-whatsapp test-mt5 test-mt5-mock dev prod run health
 
 # Prefer venv python when present
@@ -20,6 +20,7 @@ help:
 	@echo "  make install-dev    Install with mock+bridge (Mac/Linux dev)"
 	@echo "  make install-native Install with native MT5 (Windows)"
 	@echo "  make install-bridge Install with bridge support (Mac/Linux)"
+	@echo "  make install-linux  Install with mt5linux (Linux VPS)"
 	@echo ""
 	@echo "Tests:"
 	@echo "  make test           Run WhatsApp + MT5 connection tests"
@@ -58,6 +59,9 @@ install-native: $(VENV)/bin/activate
 
 install-bridge: $(VENV)/bin/activate
 	$(PIP) install -e ".[bridge]"
+
+install-linux: $(VENV)/bin/activate
+	$(PIP) install -e ".[linux]"
 
 # --- Tests ---
 

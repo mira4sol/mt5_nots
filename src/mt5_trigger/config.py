@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = PROJECT_ROOT / "config"
@@ -45,6 +45,7 @@ class AppSettings(BaseModel):
 
 
 Mt5Backend = Literal["auto", "native", "bridge", "mock"]
+BridgeClient = Literal["auto", "mt5linux", "mac-bridge"]
 
 
 class AccountConfig(BaseModel):
@@ -55,9 +56,24 @@ class AccountConfig(BaseModel):
     enabled: bool = True
     whatsapp_target: str = ""
     mt5_backend: Mt5Backend = "auto"
+    bridge_client: BridgeClient = "auto"
     bridge_host: str = "localhost"
     bridge_port: int = 18813
     terminal_path: str | None = None
+
+    @field_validator("mt5_backend", "bridge_client", mode="before")
+    @classmethod
+    def blank_literal(cls, v: Any) -> Any:
+        if v == "" or v is None:
+            return "auto"
+        return v
+
+    @field_validator("terminal_path", mode="before")
+    @classmethod
+    def blank_terminal_path(cls, v: Any) -> str | None:
+        if v == "" or v is None:
+            return None
+        return v
 
 
 class AppConfig(BaseModel):

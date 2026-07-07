@@ -6,9 +6,10 @@ accounts:
     enabled: true
     whatsapp_target: "${WHATSAPP_TARGET}"
     mt5_backend: auto
+    bridge_client: "${MT5_BRIDGE_CLIENT}"
     bridge_host: "${MT5_BRIDGE_HOST}"
     bridge_port: "${MT5_BRIDGE_PORT}"
-    terminal_path: null
+    terminal_path: "${MT5_TERMINAL_PATH}"
 
   # Add more accounts — one bridge_port / terminal per MT5 instance:
   # - name: second_account

@@ -11,6 +11,7 @@ from mt5_trigger.mt5.backend import (
     PENDING_ORDER_TYPES,
     POSITION_TYPE_BUY,
     POSITION_TYPE_SELL,
+    bridge_protocol_hint,
     load_mt5_module,
     resolve_backend,
 )
@@ -80,7 +81,29 @@ class MT5Client:
         return self._connected
 
     def connect(self) -> bool:
-        self._mt5 = load_mt5_module(self.backend, self.account)
+        try:
+            self._mt5 = load_mt5_module(self.backend, self.account)
+        except ImportError as exc:
+            logger.error(
+                "MT5 import failed for %s (%s): %s",
+                self.account.name,
+                self.backend,
+                exc,
+            )
+            self._connected = False
+            return False
+        except Exception as exc:
+            hint = bridge_protocol_hint(exc)
+            logger.error(
+                "MT5 bridge setup failed for %s: %s",
+                self.account.name,
+                exc,
+            )
+            if hint:
+                logger.error(hint)
+            self._connected = False
+            return False
+
         kwargs: dict[str, Any] = {
             "login": int(self.account.login),
             "password": self.account.password,

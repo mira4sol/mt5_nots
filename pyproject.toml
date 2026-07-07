@@ -18,9 +18,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-bridge = ["mt5-mac-bridge[bridge]>=0.1.0"]
+bridge = ["mt5-mac-bridge[bridge]>=0.1.0", "mt5linux>=0.1.0"]
+linux = ["mt5linux>=0.1.0"]
 native = ["MetaTrader5>=5.0.45"]
-dev = ["mt5-mac-bridge[mock,bridge]>=0.1.0"]
+dev = ["mt5-mac-bridge[mock,bridge]>=0.1.0", "mt5linux>=0.1.0"]
 
 [project.scripts]
 mt5-trigger = "mt5_trigger.main:main"
