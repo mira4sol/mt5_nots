@@ -14,6 +14,7 @@ from mt5_trigger.mt5.backend import (
     bridge_protocol_hint,
     load_mt5_module,
     resolve_backend,
+    resolve_bridge_client,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,12 +85,18 @@ class MT5Client:
         try:
             self._mt5 = load_mt5_module(self.backend, self.account)
         except ImportError as exc:
+            bridge_client = resolve_bridge_client(self.account)
             logger.error(
                 "MT5 import failed for %s (%s): %s",
                 self.account.name,
                 self.backend,
                 exc,
             )
+            if bridge_client == "mt5linux" and "mt5linux" in str(exc):
+                logger.error(
+                    "Install mt5linux in this venv: .venv/bin/pip install mt5linux "
+                    "or run: make install-prod"
+                )
             self._connected = False
             return False
         except Exception as exc:

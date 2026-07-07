@@ -46,13 +46,14 @@ setup: $(VENV)/bin/activate
 	@mkdir -p data
 	@echo "Setup complete. Edit .env and config/accounts.yaml, then: make test"
 
-install: install-dev
+install: install-prod
 
 install-dev: $(VENV)/bin/activate
 	$(PIP) install -e ".[dev]"
 
 install-prod: $(VENV)/bin/activate
 	$(PIP) install -e .
+	@echo "Installed mt5linux in venv (required for Linux bridge)"
 
 install-native: $(VENV)/bin/activate
 	$(PIP) install -e ".[native]"
@@ -70,7 +71,11 @@ test: test-whatsapp test-mt5
 test-whatsapp:
 	$(PYTHON) scripts/test_whatsapp.py
 
-test-mt5:
+test-mt5: install-prod
+	@$(PYTHON) -c "import mt5linux" 2>/dev/null || ( \
+		echo "ERROR: mt5linux not installed in venv. Run: make install-prod" >&2; \
+		echo "  Or: $(PIP) install mt5linux" >&2; \
+		exit 1)
 	$(PYTHON) scripts/test_mt5.py --pending
 
 test-mt5-mock:

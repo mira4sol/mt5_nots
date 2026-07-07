@@ -156,6 +156,16 @@ def main() -> int:
     client = MT5Client(account)
     print("\nConnecting to MT5...")
     if not client.connect():
+        bridge_client = resolve_bridge_client(account)
+        extra = ""
+        if bridge_client == "mt5linux":
+            try:
+                import mt5linux  # noqa: F401
+            except ImportError:
+                extra = (
+                    "\n  mt5linux missing in venv (your system python3 may have it instead).\n"
+                    "  Fix: make install-prod   OR   .venv/bin/pip install mt5linux"
+                )
         print(
             "FAILED: Could not connect to MT5.\n"
             "Checklist:\n"
@@ -163,7 +173,8 @@ def main() -> int:
             "  Linux bridge: pip install mt5linux, MT5_BRIDGE_CLIENT=mt5linux, mt5linux server running\n"
             "  Mac bridge: mt5-mac-bridge serve (MT5_BRIDGE_CLIENT=mac-bridge)\n"
             "  Remote: SSH tunnel or set bridge_host to VPS IP\n"
-            "  Dev only: --backend mock",
+            "  Dev only: --backend mock"
+            f"{extra}",
             file=sys.stderr,
         )
         return 1
