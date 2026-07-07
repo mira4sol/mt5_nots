@@ -1,8 +1,8 @@
 poll_interval_seconds: 2
-health_host: "0.0.0.0"
+health_host: '0.0.0.0'
 health_port: 8080
-openclaw_bin: "openclaw"
-db_path: "data/mt5_trigger.db"
+openclaw_bin: 'openclaw'
+db_path: 'data/mt5_trigger.db'
 
 near_trigger:
   min_pips: 12
