@@ -1,0 +1,21 @@
+accounts:
+  - name: valetax_main
+    login: "${MT5_LOGIN}"
+    password: "${MT5_PASSWORD}"
+    server: "ValetaxGlobal-Live3"
+    enabled: true
+    whatsapp_target: "${WHATSAPP_TARGET}"
+    mt5_backend: auto
+    bridge_host: localhost
+    bridge_port: 18813
+    terminal_path: null
+
+  # Add more accounts — one bridge_port / terminal per MT5 instance:
+  # - name: second_account
+  #   login: "${MT5_LOGIN_2}"
+  #   password: "${MT5_PASSWORD_2}"
+  #   server: "Broker-Server"
+  #   enabled: true
+  #   mt5_backend: bridge
+  #   bridge_host: "10.0.0.5"
+  #   bridge_port: 18814

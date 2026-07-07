@@ -1,0 +1,15 @@
+poll_interval_seconds: 2
+health_host: "0.0.0.0"
+health_port: 8080
+openclaw_bin: "openclaw"
+db_path: "data/mt5_trigger.db"
+
+near_trigger:
+  min_pips: 12
+  spread_multiplier: 3
+  rollover_blackout_minutes: 30
+  daily_rollover_blackout_minutes: 5
+
+openclaw:
+  max_retries: 3
+  retry_base_seconds: 2
