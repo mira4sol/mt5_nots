@@ -114,9 +114,10 @@ class CommandService:
         message: str,
         account: AccountConfig,
         target: str,
+        reply_to: str | None = None,
     ) -> bool:
         notifier = OpenClawNotifier(self.config.settings, target)
-        return notifier.send(message, target=target)
+        return notifier.send(message, target=target, reply_to=reply_to)
 
     def handle_inbound(
         self,
@@ -125,6 +126,7 @@ class CommandService:
         sender: str,
         group_jid: str,
         account_name: str | None = None,
+        message_id: str | None = None,
     ) -> CommandResult | None:
         if not self.config.settings.commands.enabled:
             return None
@@ -156,6 +158,7 @@ class CommandService:
                 message="Please wait before sending another command.",
                 account=account,
                 target=group_jid,
+                reply_to=message_id,
             )
             return CommandResult(
                 command=command,
@@ -178,12 +181,14 @@ class CommandService:
             account_name=account.name,
             send=True,
             target=group_jid,
+            reply_to=message_id,
         )
         if result.error:
             self._send_reply(
                 message=f"MT5 error: {result.error}",
                 account=account,
                 target=group_jid,
+                reply_to=message_id,
             )
             result.sent = True
         elif result.error is None:
@@ -198,6 +203,7 @@ class CommandService:
         group_jid: str | None = None,
         send: bool = False,
         target: str | None = None,
+        reply_to: str | None = None,
     ) -> CommandResult:
         account = resolve_command_account(
             self.config,
@@ -223,6 +229,7 @@ class CommandService:
                     account,
                     send=send,
                     target=target or account.whatsapp_target,
+                    reply_to=reply_to,
                 )
             message = self._execute(command, account)
         except ImportError as exc:
@@ -251,7 +258,12 @@ class CommandService:
                     message=message,
                     error="No whatsapp_target configured for account",
                 )
-            sent = self._send_reply(message=message, account=account, target=dest)
+            sent = self._send_reply(
+                message=message,
+                account=account,
+                target=dest,
+                reply_to=reply_to,
+            )
             if not sent and message:
                 return CommandResult(
                     command=command,
@@ -347,6 +359,7 @@ class CommandService:
         *,
         send: bool,
         target: str | None,
+        reply_to: str | None = None,
     ) -> CommandResult:
         if not send:
             return CommandResult(
@@ -375,6 +388,7 @@ class CommandService:
             charts_dir=charts_dir,
             whatsapp_target=dest,
             send=True,
+            reply_to=reply_to,
         )
         return CommandResult(
             command="chart",

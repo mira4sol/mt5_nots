@@ -19,6 +19,7 @@ type PluginCommandContext = {
   to?: string
   from?: string
   sessionKey?: string
+  messageId?: string
   pluginConfig?: Record<string, unknown>
   config?: {
     plugins?: {
@@ -127,6 +128,7 @@ export default definePluginEntry({
         const sendImage = command === 'chart'
         const message = await fetchMt5Command(config, command, account, {
           send: sendImage,
+          replyTo: ctx.messageId ?? null,
         })
         if (sendImage) {
           return { text: "" }

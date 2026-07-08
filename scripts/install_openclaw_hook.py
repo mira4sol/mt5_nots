@@ -113,6 +113,7 @@ def _patch_config(
     channels = config.setdefault("channels", {})
     whatsapp = channels.setdefault("whatsapp", {})
     whatsapp["enabled"] = whatsapp.get("enabled", True)
+    whatsapp["replyToMode"] = whatsapp.get("replyToMode", "first")
     allow_variants = whatsapp_admin_variants(admins) if admins else []
     if allow_variants:
         whatsapp["groupPolicy"] = "allowlist"
@@ -244,6 +245,7 @@ def main() -> int:
             print(f"    {account.whatsapp_target} -> {account.name}")
     print(f"  webhook    : {webhook_url}")
     print("  whatsapp   : pluginHooks.messageReceived = true")
+    print("  whatsapp   : replyToMode = first (quote command replies)")
     if admins:
         print(f"  admins     : {', '.join(admins)} (from config/settings.yaml)")
         print(f"  allowlist  : {', '.join(allow_variants)}")

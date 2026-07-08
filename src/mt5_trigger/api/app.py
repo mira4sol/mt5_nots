@@ -40,6 +40,7 @@ class CommandRunRequest(BaseModel):
     account: str | None = None
     send: bool = True
     target: str | None = None
+    reply_to: str | None = None
 
 
 def create_app(config: AppConfig) -> FastAPI:
@@ -113,6 +114,7 @@ def create_app(config: AppConfig) -> FastAPI:
         account: str | None = Query(default=None),
         send: bool = Query(default=True),
         target: str | None = Query(default=None),
+        reply_to: str | None = Query(default=None),
         _: None = Depends(_auth),
     ):
         raw = command_name.lower().replace("-", "_")
@@ -123,6 +125,7 @@ def create_app(config: AppConfig) -> FastAPI:
             account_name=account,
             send=send,
             target=target,
+            reply_to=reply_to,
         )
         return _command_response(result)
 
@@ -132,6 +135,7 @@ def create_app(config: AppConfig) -> FastAPI:
         account: str | None = Query(default=None),
         send: bool = Query(default=True),
         target: str | None = Query(default=None),
+        reply_to: str | None = Query(default=None),
         _: None = Depends(_auth),
     ):
         return get_command(
@@ -139,6 +143,7 @@ def create_app(config: AppConfig) -> FastAPI:
             account=account,
             send=send,
             target=target,
+            reply_to=reply_to,
             _=None,
         )
 
@@ -152,6 +157,7 @@ def create_app(config: AppConfig) -> FastAPI:
             account_name=body.account,
             send=body.send,
             target=body.target,
+            reply_to=body.reply_to,
         )
         return _command_response(result)
 
@@ -162,6 +168,7 @@ def create_app(config: AppConfig) -> FastAPI:
             sender=body.sender,
             group_jid=body.group_jid,
             account_name=body.account,
+            message_id=body.message_id,
         )
         if result is None:
             return {"handled": False}

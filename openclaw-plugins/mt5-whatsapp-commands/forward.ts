@@ -279,15 +279,21 @@ export async function fetchMt5Command(
   config: PluginRuntimeConfig,
   command: string,
   account: string,
-  options: { send?: boolean } = {},
+  options: { send?: boolean; replyTo?: string | null } = {},
 ): Promise<string> {
   // OpenClaw displays the returned command text in chat; send=false avoids a
   // duplicate WhatsApp delivery from mt5_trigger's OpenClaw notifier.
   // /chart is the exception: send=true delivers the image via mt5_trigger.
   const send = options.send ?? false;
-  const url =
-    `${config.apiBaseUrl}/api/commands/${command}` +
-    `?account=${encodeURIComponent(account)}&send=${send ? "true" : "false"}`;
+  const params = new URLSearchParams({
+    account,
+    send: send ? "true" : "false",
+  });
+  const replyTo = options.replyTo?.trim();
+  if (replyTo) {
+    params.set("reply_to", replyTo);
+  }
+  const url = `${config.apiBaseUrl}/api/commands/${command}?${params.toString()}`;
   const response = await fetch(url, { headers: authHeaders(config) });
   const body = (await response.json()) as {
     message?: string;

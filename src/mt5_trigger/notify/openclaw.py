@@ -15,8 +15,19 @@ class OpenClawNotifier:
         self.settings = settings
         self.default_target = default_target
 
-    def send(self, message: str, target: str | None = None) -> bool:
-        return self._run_send(message=message, media_path=None, target=target)
+    def send(
+        self,
+        message: str,
+        target: str | None = None,
+        *,
+        reply_to: str | None = None,
+    ) -> bool:
+        return self._run_send(
+            message=message,
+            media_path=None,
+            target=target,
+            reply_to=reply_to,
+        )
 
     def send_media(
         self,
@@ -25,12 +36,14 @@ class OpenClawNotifier:
         target: str | None = None,
         *,
         force_document: bool = False,
+        reply_to: str | None = None,
     ) -> bool:
         return self._run_send(
             message=message,
             media_path=Path(media_path),
             target=target,
             force_document=force_document,
+            reply_to=reply_to,
         )
 
     def _run_send(
@@ -40,6 +53,7 @@ class OpenClawNotifier:
         media_path: Path | None,
         target: str | None,
         force_document: bool = False,
+        reply_to: str | None = None,
     ) -> bool:
         dest = target or self.default_target
         if not dest:
@@ -62,6 +76,8 @@ class OpenClawNotifier:
             cmd.extend(["--media", str(media_path)])
         if message:
             cmd.extend(["--message", message])
+        if reply_to:
+            cmd.extend(["--reply-to", reply_to])
         if force_document:
             cmd.append("--force-document")
 

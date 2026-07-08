@@ -75,6 +75,15 @@ def test_fetch_mt5_command_uses_send_false() -> None:
     ).read_text(encoding="utf-8")
     assert "send=false" in forward_ts
     assert "fetchMt5Command" in forward_ts
+    assert 'params.set("reply_to"' in forward_ts
+
+
+def test_install_openclaw_hook_sets_reply_to_mode() -> None:
+    install_py = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "scripts/install_openclaw_hook.py"
+    ).read_text(encoding="utf-8")
+    assert 'whatsapp["replyToMode"]' in install_py
 
 
 def test_orders_message_includes_symbol_price() -> None:

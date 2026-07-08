@@ -79,6 +79,7 @@ def send_live_chart(
     whatsapp_target: str | None = None,
     send: bool = True,
     force_document: bool = False,
+    reply_to: str | None = None,
 ) -> ChartSendResult:
     """Render the current live chart and optionally send it to WhatsApp."""
     _ensure_chart_deps()
@@ -125,6 +126,7 @@ def send_live_chart(
             message="",
             target=whatsapp_target,
             force_document=force_document,
+            reply_to=reply_to,
         )
         if not sent:
             raise RuntimeError("Failed to send chart via OpenClaw")
