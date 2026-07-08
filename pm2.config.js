@@ -1,20 +1,30 @@
+const path = require('path');
+
 module.exports = {
   apps: [
     {
-      name: 'sol-radar',
-      // Use the venv's Python binary directly — PM2 can't misparse a binary as JS
-      script: './venv/bin/python',
-      args: '-m uvicorn app.main:app --host 0.0.0.0 --port 8000',
+      name: 'mt5-trigger',
+      cwd: __dirname,
+      // Use the venv Python directly — PM2 treats script as the executable
+      script: path.join(__dirname, '.venv', 'bin', 'python'),
+      args: '-m mt5_trigger',
       interpreter: 'none',
       autorestart: true,
-      watch: false, // Don't use --reload in production
+      watch: false,
+      max_restarts: 10,
+      restart_delay: 5000,
       env: {
         NODE_ENV: 'production',
-        PYTHONPATH: '.',
-        // Ensure the venv's bin is on PATH for any subprocess calls
-        PATH: `${__dirname}/venv/bin:${process.env.PATH}`,
-        VIRTUAL_ENV: `${__dirname}/venv`,
+        PYTHONPATH: path.join(__dirname, 'src'),
+        VIRTUAL_ENV: path.join(__dirname, '.venv'),
+        // openclaw CLI for WhatsApp sends (adjust if installed elsewhere)
+        PATH: `${path.join(__dirname, '.venv', 'bin')}:${process.env.PATH}`,
       },
+      // Logs (optional — pm2 default is ~/.pm2/logs/)
+      error_file: path.join(__dirname, 'data', 'pm2-error.log'),
+      out_file: path.join(__dirname, 'data', 'pm2-out.log'),
+      merge_logs: true,
+      time: true,
     },
   ],
-}
+};
