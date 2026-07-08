@@ -1,6 +1,6 @@
 .PHONY: help install install-dev install-prod install-native install-bridge install-linux install-charts setup \
         test test-whatsapp test-mt5 test-mt5-mock test-openclaw-hook test-whatsapp-inbound test-commands diagnose-whatsapp \
-        dev prod run health send-chart \
+        dev prod run health send-chart run-chart \
         deploy deploy-prereqs pm2-start pm2-stop pm2-logs pm2-status install-openclaw-hook
 
 # Prefer venv python when present
@@ -40,7 +40,7 @@ help:
 	@echo ""
 	@echo "Charts:"
 	@echo "  make install-charts        Install mplfinance/matplotlib for chart scripts"
-	@echo "  make send-chart            Live XAUUSD chart → WhatsApp group"
+	@echo "  make send-chart            Live XAUUSD chart → WhatsApp group (alias: run-chart)"
 	@echo ""
 	@echo "Run:"
 	@echo "  make dev            Start monitor with MT5_BACKEND=mock"
@@ -142,7 +142,7 @@ install-openclaw-hook:
 diagnose-whatsapp:
 	$(PYTHON) scripts/diagnose_whatsapp_commands.py
 
-send-chart: install-charts install-prod
+send-chart run-chart: install-charts install-prod
 	$(PYTHON) scripts/send_chart.py
 
 # --- Deploy (VPS) ---

@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 import pandas as pd
+from matplotlib.transforms import blended_transform_factory
 
 from mt5_trigger.mt5.client import OpenPosition, PendingOrder, RateBar, SymbolTick
 
@@ -27,6 +28,10 @@ TRIGGER = "#ffa657"
 ENTRY = "#a371f7"
 SL_COLOR = "#f85149"
 TP_COLOR = "#3fb950"
+
+MAX_CHART_WIDTH_PX = 2048
+MAX_CHART_HEIGHT_PX = 2048
+CHART_DPI = 120
 
 
 @dataclass(frozen=True)
@@ -157,6 +162,52 @@ def _levels_for_symbol(
     return unique
 
 
+def _price_bounds(
+    df: pd.DataFrame,
+    levels: list[PriceLevel],
+) -> tuple[float, float]:
+    low = float(df["Low"].min())
+    high = float(df["High"].max())
+    for level in levels:
+        low = min(low, level.price)
+        high = max(high, level.price)
+    span = high - low
+    pad = max(span * 0.06, 0.5)
+    return low - pad, high + pad
+
+
+def _save_figure(fig: plt.Figure, output_path: Path) -> None:
+    """Save with fixed bounds so annotations never explode canvas size."""
+    fig.savefig(
+        output_path,
+        dpi=CHART_DPI,
+        facecolor=BG,
+        edgecolor="none",
+        bbox_inches=None,
+        pad_inches=0.1,
+    )
+
+    try:
+        from PIL import Image
+    except ImportError:
+        return
+
+    with Image.open(output_path) as img:
+        width, height = img.size
+        if width <= MAX_CHART_WIDTH_PX and height <= MAX_CHART_HEIGHT_PX:
+            return
+        scale = min(
+            MAX_CHART_WIDTH_PX / width,
+            MAX_CHART_HEIGHT_PX / height,
+            1.0,
+        )
+        resized = img.resize(
+            (int(width * scale), int(height * scale)),
+            Image.Resampling.LANCZOS,
+        )
+        resized.save(output_path, format="PNG", optimize=True)
+
+
 def render_symbol_chart(
     *,
     symbol: str,
@@ -222,19 +273,19 @@ def render_symbol_chart(
         type="candle",
         style=style,
         volume=True,
-        figsize=(13, 7.5),
+        figsize=(12, 7),
         returnfig=True,
         datetime_format="%H:%M",
         xrotation=0,
-        tight_layout=True,
-        scale_padding={"left": 0.35, "top": 0.8, "right": 1.0, "bottom": 0.5},
     )
     ax = axes[0]
     ax.set_title(title, color=TEXT, fontsize=14, fontweight="bold", pad=14)
     ax.set_facecolor(PANEL)
 
-    x_end = len(df) - 1
-    x_label = x_end + 0.6
+    y_min, y_max = _price_bounds(df, levels)
+    ax.set_ylim(y_min, y_max)
+
+    label_transform = blended_transform_factory(ax.transAxes, ax.transData)
 
     for level in levels:
         ax.axhline(
@@ -245,16 +296,17 @@ def render_symbol_chart(
             alpha=level.alpha,
         )
         ax.text(
-            x_label,
+            1.01,
             level.price,
-            f"  {level.label}",
+            f" {level.label} ",
+            transform=label_transform,
             color=level.color,
-            fontsize=8.5,
+            fontsize=8,
             va="center",
             ha="left",
-            clip_on=False,
+            clip_on=True,
             bbox={
-                "boxstyle": "round,pad=0.25",
+                "boxstyle": "round,pad=0.2",
                 "facecolor": PANEL,
                 "edgecolor": level.color,
                 "alpha": 0.92,
@@ -262,6 +314,7 @@ def render_symbol_chart(
         )
 
     # Highlight latest candle
+    x_end = len(df) - 1
     ax.axvspan(x_end - 0.45, x_end + 0.45, color=TEXT, alpha=0.04)
 
     legend_lines = [
@@ -270,7 +323,7 @@ def render_symbol_chart(
         "■ Open entry / SL / TP",
     ]
     fig.text(
-        0.015,
+        0.02,
         0.02,
         "   ".join(legend_lines),
         color=MUTED,
@@ -278,6 +331,7 @@ def render_symbol_chart(
         ha="left",
     )
 
-    fig.savefig(output_path, dpi=150, facecolor=BG, edgecolor="none", bbox_inches="tight")
+    fig.subplots_adjust(left=0.08, right=0.68, top=0.92, bottom=0.12, hspace=0.05)
+    _save_figure(fig, output_path)
     plt.close(fig)
     return output_path
