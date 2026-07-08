@@ -68,14 +68,31 @@ def test_run_guide_via_api_normalization() -> None:
     assert _normalize_command_name("mt5help") == "guide"
 
 
-def test_fetch_mt5_command_uses_send_false() -> None:
+def test_fetch_mt5_command_sends_with_reply_to() -> None:
     forward_ts = (
         __import__("pathlib").Path(__file__).resolve().parents[1]
         / "openclaw-plugins/mt5-whatsapp-commands/forward.ts"
     ).read_text(encoding="utf-8")
-    assert "send=false" in forward_ts
-    assert "fetchMt5Command" in forward_ts
+    index_ts = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "openclaw-plugins/mt5-whatsapp-commands/index.ts"
+    ).read_text(encoding="utf-8")
+    assert "send=true" in forward_ts or "send: true" in index_ts
     assert 'params.set("reply_to"' in forward_ts
+    assert 'params.set("target"' in forward_ts
+    assert "message_received" in index_ts
+    assert "suppressReply: true" in index_ts
+
+
+def test_plugin_uses_message_cache() -> None:
+    plugin_dir = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "openclaw-plugins/mt5-whatsapp-commands"
+    )
+    assert (plugin_dir / "message-cache.ts").exists()
+    index_ts = (plugin_dir / "index.ts").read_text(encoding="utf-8")
+    assert "rememberMessageId" in index_ts
+    assert "lookupMessageId" in index_ts
 
 
 def test_install_openclaw_hook_sets_reply_to_mode() -> None:

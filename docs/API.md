@@ -6,7 +6,7 @@ Base URL (deployed server):
 
 All command endpoints **send to WhatsApp by default** (`send=true`). Pass `send=false` to return JSON only without delivering to the group.
 
-The OpenClaw plugin uses `send=false` because it posts the API response as the command reply in chat (avoids duplicate messages).
+The OpenClaw plugin sends via `send=true` with `reply_to` (quoted reply) and returns `suppressReply` to avoid duplicate messages.
 
 ## Authentication
 

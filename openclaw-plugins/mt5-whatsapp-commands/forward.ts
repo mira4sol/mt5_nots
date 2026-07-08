@@ -279,12 +279,11 @@ export async function fetchMt5Command(
   config: PluginRuntimeConfig,
   command: string,
   account: string,
-  options: { send?: boolean; replyTo?: string | null } = {},
+  options: { send?: boolean; replyTo?: string | null; target?: string | null } = {},
 ): Promise<string> {
-  // OpenClaw displays the returned command text in chat; send=false avoids a
-  // duplicate WhatsApp delivery from mt5_trigger's OpenClaw notifier.
-  // /chart is the exception: send=true delivers the image via mt5_trigger.
-  const send = options.send ?? false;
+  // mt5_trigger sends directly to WhatsApp with --reply-to when send=true.
+  // The plugin returns suppressReply so OpenClaw does not post a duplicate.
+  const send = options.send ?? true;
   const params = new URLSearchParams({
     account,
     send: send ? "true" : "false",
@@ -292,6 +291,10 @@ export async function fetchMt5Command(
   const replyTo = options.replyTo?.trim();
   if (replyTo) {
     params.set("reply_to", replyTo);
+  }
+  const target = options.target?.trim();
+  if (target) {
+    params.set("target", target);
   }
   const url = `${config.apiBaseUrl}/api/commands/${command}?${params.toString()}`;
   const response = await fetch(url, { headers: authHeaders(config) });
@@ -352,10 +355,6 @@ export async function forwardSlashCommand(
 
   const text = (message.content ?? "").trim();
   if (!text.startsWith("/")) {
-    return false;
-  }
-  if (isPluginHandledCommand(text)) {
-    log?.(`skip webhook forward for plugin command ${text.split(/\s+/)[0]}`);
     return false;
   }
 

@@ -6,10 +6,16 @@ import {
   groupFromSessionKey,
   isAllowedAdmin,
   isAllowedGroup,
+  isWhatsAppChannel,
   normalizePhone,
   resolveConfig,
   resolveGroupJid,
 } from './forward.js'
+import {
+  lookupMessageId,
+  messageCacheKey,
+  rememberMessageId,
+} from './message-cache.js'
 
 type PluginCommandContext = {
   senderId?: string
@@ -28,14 +34,43 @@ type PluginCommandContext = {
   }
 }
 
+type MessageHookContext = {
+  channelId?: string
+  senderId?: string
+  messageId?: string
+  sessionKey?: string
+  to?: string
+  from?: string
+  content?: string
+  metadata?: Record<string, unknown>
+}
+
+type MessageReceivedEvent = {
+  channelId?: string
+  content?: string
+  senderId?: string
+  messageId?: string
+  to?: string
+  from?: string
+}
+
 type OpenClawApi = {
   logger: { info: (msg: string) => void; error: (msg: string) => void }
   config?: PluginCommandContext['config']
+  on?: (
+    hook: string,
+    handler: (
+      event: MessageReceivedEvent,
+      ctx: MessageHookContext,
+    ) => Promise<void> | void,
+  ) => void
   registerCommand: (def: {
     name: string
     description: string
     requireAuth?: boolean
-    handler: (ctx: PluginCommandContext) => Promise<{ text: string }>
+    handler: (
+      ctx: PluginCommandContext,
+    ) => Promise<{ text?: string; suppressReply?: boolean }>
   }) => void
 }
 
@@ -83,6 +118,27 @@ function resolveCommandGroup(ctx: PluginCommandContext): string {
   })
 }
 
+function resolveReplyTo(
+  ctx: PluginCommandContext,
+  groupJid: string,
+  sender: string,
+): string | null {
+  const commandBody = (ctx.commandBody ?? '').trim()
+  return lookupMessageId(
+    messageCacheKey({
+      sessionKey: ctx.sessionKey,
+      body: commandBody,
+    }),
+    messageCacheKey({
+      channelId: ctx.channelId ?? ctx.channel,
+      to: groupJid,
+      sender,
+      body: commandBody,
+    }),
+    ctx.messageId?.trim() ?? '',
+  )
+}
+
 export default definePluginEntry({
   id: 'mt5-whatsapp-commands',
   name: 'MT5 WhatsApp Commands',
@@ -92,10 +148,39 @@ export default definePluginEntry({
     const baseConfig = () =>
       resolveConfig(pluginConfigFromContext({ config: api.config }))
 
+    api.on?.('message_received', (event, ctx) => {
+      const channelId = ctx.channelId ?? event.channelId
+      if (!isWhatsAppChannel(channelId)) {
+        return
+      }
+
+      const messageId = ctx.messageId ?? event.messageId
+      const content = (event.content ?? ctx.content ?? '').trim()
+      if (!messageId || !content.startsWith('/')) {
+        return
+      }
+
+      const sender = normalizePhone(ctx.senderId ?? event.senderId ?? ctx.from ?? '')
+      const to = (ctx.to ?? event.to ?? groupFromSessionKey(ctx.sessionKey)).trim()
+      rememberMessageId(
+        messageCacheKey({ sessionKey: ctx.sessionKey, body: content }),
+        String(messageId),
+      )
+      rememberMessageId(
+        messageCacheKey({
+          channelId,
+          to,
+          sender,
+          body: content,
+        }),
+        String(messageId),
+      )
+    })
+
     const runRegisteredCommand = async (
       command: string,
       ctx: PluginCommandContext,
-    ): Promise<{ text: string }> => {
+    ): Promise<{ text?: string; suppressReply?: boolean }> => {
       const config = resolveConfig(pluginConfigFromContext(ctx)) ?? baseConfig()
       if (!config) {
         return {
@@ -122,18 +207,16 @@ export default definePluginEntry({
       }
 
       try {
+        const replyTo = resolveReplyTo(ctx, groupJid, sender)
         log(
-          `command /${command} sender=${sender} group=${groupJid} account=${account}`,
+          `command /${command} sender=${sender} group=${groupJid} account=${account} replyTo=${replyTo || '(none)'}`,
         )
-        const sendImage = command === 'chart'
-        const message = await fetchMt5Command(config, command, account, {
-          send: sendImage,
-          replyTo: ctx.messageId ?? null,
+        await fetchMt5Command(config, command, account, {
+          send: true,
+          replyTo,
+          target: groupJid,
         })
-        if (sendImage) {
-          return { text: "" }
-        }
-        return { text: message }
+        return { suppressReply: true }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error)
         api.logger.error(`[mt5-whatsapp-commands] /${command} failed: ${msg}`)
