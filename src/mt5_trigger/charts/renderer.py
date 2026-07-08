@@ -418,33 +418,36 @@ def render_symbol_chart(
     ax.grid(True, which="major", axis="y", alpha=0.35)
     ax.grid(False, axis="x")
 
-    # Title row like TradingView
-    fig.text(0.03, 0.965, title, color=TEXT, fontsize=15, fontweight="bold", ha="left")
+    # Title row like TradingView (stacked so long prices don't overlap change text)
+    fig.text(0.03, 0.965, title, color=TEXT, fontsize=15, fontweight="bold", ha="left", va="top")
     fig.text(
         0.03,
-        0.925,
-        f"{last_close:.2f}  ",
+        0.918,
+        f"{last_close:.2f}",
         color=change_color,
-        fontsize=20,
+        fontsize=22,
         fontweight="bold",
         ha="left",
+        va="top",
     )
     fig.text(
-        0.11,
-        0.928,
+        0.03,
+        0.882,
         f"{'+' if change >= 0 else ''}{change:.2f}  ({change_pct:+.2f}%)",
         color=change_color,
         fontsize=11,
         ha="left",
+        va="top",
     )
     if tick is not None:
         fig.text(
-            0.11,
-            0.895,
+            0.03,
+            0.852,
             f"Bid {tick.bid:.2f}   Ask {tick.ask:.2f}",
             color=MUTED,
             fontsize=9,
             ha="left",
+            va="top",
         )
 
     # Highlight latest candle column
@@ -461,7 +464,7 @@ def render_symbol_chart(
     legend = "Last price  ·  Pending (nearest)  ·  Entry / SL / TP"
     fig.text(0.03, 0.03, legend, color=MUTED, fontsize=8, ha="left")
 
-    fig.subplots_adjust(left=0.06, right=0.74, top=0.88, bottom=0.10, hspace=0.04)
+    fig.subplots_adjust(left=0.06, right=0.74, top=0.80, bottom=0.10, hspace=0.04)
     _save_figure(fig, output_path)
     plt.close(fig)
     return output_path
