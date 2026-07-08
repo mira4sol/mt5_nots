@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import time
+from pathlib import Path
 
 from mt5_trigger.config import AppSettings
 
@@ -15,9 +16,37 @@ class OpenClawNotifier:
         self.default_target = default_target
 
     def send(self, message: str, target: str | None = None) -> bool:
+        return self._run_send(message=message, media_path=None, target=target)
+
+    def send_media(
+        self,
+        media_path: str | Path,
+        message: str = "",
+        target: str | None = None,
+        *,
+        force_document: bool = False,
+    ) -> bool:
+        return self._run_send(
+            message=message,
+            media_path=Path(media_path),
+            target=target,
+            force_document=force_document,
+        )
+
+    def _run_send(
+        self,
+        *,
+        message: str,
+        media_path: Path | None,
+        target: str | None,
+        force_document: bool = False,
+    ) -> bool:
         dest = target or self.default_target
         if not dest:
             logger.error("No WhatsApp target configured; skipping send")
+            return False
+        if not message and media_path is None:
+            logger.error("Nothing to send: message and media are both empty")
             return False
 
         cmd = [
@@ -28,9 +57,14 @@ class OpenClawNotifier:
             "whatsapp",
             "--target",
             dest,
-            "--message",
-            message,
         ]
+        if media_path is not None:
+            cmd.extend(["--media", str(media_path)])
+        if message:
+            cmd.extend(["--message", message])
+        if force_document:
+            cmd.append("--force-document")
+
         max_retries = self.settings.openclaw.max_retries
         base = self.settings.openclaw.retry_base_seconds
 

@@ -23,6 +23,7 @@ bridge = ["mt5-mac-bridge[bridge]>=0.1.0", "mt5linux>=0.1.0"]
 linux = ["mt5linux>=0.1.0"]
 native = ["MetaTrader5>=5.0.45"]
 dev = ["mt5-mac-bridge[mock,bridge]>=0.1.0", "mt5linux>=0.1.0"]
+charts = ["mplfinance>=0.12.9b7", "matplotlib>=3.8.0", "pandas>=2.0.0"]
 
 [project.scripts]
 mt5-trigger = "mt5_trigger.main:main"

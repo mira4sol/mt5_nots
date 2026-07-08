@@ -1,6 +1,6 @@
-.PHONY: help install install-dev install-prod install-native install-bridge install-linux setup \
+.PHONY: help install install-dev install-prod install-native install-bridge install-linux install-charts setup \
         test test-whatsapp test-mt5 test-mt5-mock test-openclaw-hook test-whatsapp-inbound test-commands diagnose-whatsapp \
-        dev prod run health \
+        dev prod run health send-chart \
         deploy deploy-prereqs pm2-start pm2-stop pm2-logs pm2-status install-openclaw-hook
 
 # Prefer venv python when present
@@ -23,7 +23,7 @@ help:
 	@echo "MT5 Trigger Monitor"
 	@echo ""
 	@echo "Setup:"
-	@echo "  make setup          Create venv, install deps, copy config templates"
+	@echo "  make setup          Create venv, install deps + charts, copy config templates"
 	@echo "  make install-dev    Install with mock+bridge (Mac/Linux dev)"
 	@echo "  make install-native Install with native MT5 (Windows)"
 	@echo "  make install-bridge Install with bridge support (Mac/Linux)"
@@ -37,6 +37,10 @@ help:
 	@echo "  make test-openclaw-hook    Install hook to data/test-openclaw (isolated)"
 	@echo "  make test-whatsapp-inbound POST /guide to webhook (requires make prod)"
 	@echo "  make test-commands         test-openclaw-hook + test-whatsapp-inbound"
+	@echo ""
+	@echo "Charts:"
+	@echo "  make install-charts        Install mplfinance/matplotlib for chart scripts"
+	@echo "  make send-chart            Live XAUUSD chart → WhatsApp group"
 	@echo ""
 	@echo "Run:"
 	@echo "  make dev            Start monitor with MT5_BACKEND=mock"
@@ -58,7 +62,7 @@ help:
 $(VENV)/bin/activate:
 	python3 -m venv $(VENV)
 
-setup: $(VENV)/bin/activate
+setup: $(VENV)/bin/activate install-charts
 	$(PIP) install -e ".[dev]"
 	@test -f .env || cp .env.example .env
 	@test -f config/accounts.yaml || cp config/accounts.yaml.example config/accounts.yaml
@@ -82,6 +86,9 @@ install-bridge: $(VENV)/bin/activate
 
 install-linux: $(VENV)/bin/activate
 	$(PIP) install -e ".[linux]"
+
+install-charts: $(VENV)/bin/activate
+	$(PIP) install -e ".[charts]"
 
 # --- Tests ---
 
@@ -134,6 +141,9 @@ install-openclaw-hook:
 
 diagnose-whatsapp:
 	$(PYTHON) scripts/diagnose_whatsapp_commands.py
+
+send-chart: install-charts install-prod
+	$(PYTHON) scripts/send_chart.py
 
 # --- Deploy (VPS) ---
 

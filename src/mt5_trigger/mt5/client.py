@@ -15,6 +15,7 @@ from mt5_trigger.mt5.backend import (
     PENDING_ORDER_TYPES,
     POSITION_TYPE_BUY,
     POSITION_TYPE_SELL,
+    TIMEFRAME_M5,
     bridge_protocol_hint,
     load_mt5_module,
     resolve_backend,
@@ -73,6 +74,16 @@ class SymbolTick:
     bid: float
     ask: float
     spread_points: float
+
+
+@dataclass
+class RateBar:
+    time: int
+    open: float
+    high: float
+    low: float
+    close: float
+    tick_volume: int
 
 
 class MT5Client:
@@ -209,6 +220,30 @@ class MT5Client:
         point = info.point if info else 0.00001
         spread_points = (tick.ask - tick.bid) / point if point else 0
         return SymbolTick(bid=tick.bid, ask=tick.ask, spread_points=spread_points)
+
+    def get_rates(
+        self,
+        symbol: str,
+        timeframe: int = TIMEFRAME_M5,
+        count: int = 100,
+    ) -> list[RateBar]:
+        self._ensure_connected()
+        if not self._mt5.symbol_select(symbol, True):
+            logger.warning("Could not select symbol %s", symbol)
+        rates = self._mt5.copy_rates_from(symbol, timeframe, datetime.now(), count)
+        if rates is None:
+            return []
+        return [
+            RateBar(
+                time=int(r["time"]),
+                open=float(r["open"]),
+                high=float(r["high"]),
+                low=float(r["low"]),
+                close=float(r["close"]),
+                tick_volume=int(r["tick_volume"]),
+            )
+            for r in rates
+        ]
 
     def get_point(self, symbol: str) -> float:
         self._ensure_connected()

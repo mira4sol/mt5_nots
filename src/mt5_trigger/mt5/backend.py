@@ -38,6 +38,10 @@ ORDER_TYPE_LABELS = {
 POSITION_TYPE_BUY = 0
 POSITION_TYPE_SELL = 1
 
+TIMEFRAME_M5 = 5
+TIMEFRAME_M15 = 15
+TIMEFRAME_H1 = 60
+
 
 def _port_open(host: str, port: int, timeout: float = 0.5) -> bool:
     try:
