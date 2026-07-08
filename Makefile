@@ -1,5 +1,6 @@
 .PHONY: help install install-dev install-prod install-native install-bridge install-linux setup \
-        test test-whatsapp test-mt5 test-mt5-mock dev prod run health \
+        test test-whatsapp test-mt5 test-mt5-mock test-openclaw-hook test-whatsapp-inbound test-commands \
+        dev prod run health \
         deploy deploy-prereqs pm2-start pm2-stop pm2-logs pm2-status install-openclaw-hook
 
 # Prefer venv python when present
@@ -16,6 +17,7 @@ ifneq (,$(wildcard .env))
 endif
 HEALTH_PORT ?= 8080
 HEALTH_HOST ?= 127.0.0.1
+TEST_OPENCLAW_HOME ?= $(CURDIR)/data/test-openclaw
 
 help:
 	@echo "MT5 Trigger Monitor"
@@ -28,10 +30,13 @@ help:
 	@echo "  make install-linux  Install with mt5linux (Linux VPS)"
 	@echo ""
 	@echo "Tests:"
-	@echo "  make test           Run WhatsApp + MT5 connection tests"
-	@echo "  make test-whatsapp  Send test message via OpenClaw"
-	@echo "  make test-mt5       Connect to MT5 and list open positions"
-	@echo "  make test-mt5-mock  MT5 test using mock backend (no terminal)"
+	@echo "  make test                  Run WhatsApp + MT5 + OpenClaw hook tests"
+	@echo "  make test-whatsapp         Send test message via OpenClaw"
+	@echo "  make test-mt5              Connect to MT5 and list open positions"
+	@echo "  make test-mt5-mock         MT5 test using mock backend (no terminal)"
+	@echo "  make test-openclaw-hook    Install hook to data/test-openclaw (isolated)"
+	@echo "  make test-whatsapp-inbound POST /help to webhook (requires make prod)"
+	@echo "  make test-commands         test-openclaw-hook + test-whatsapp-inbound"
 	@echo ""
 	@echo "Run:"
 	@echo "  make dev            Start monitor with MT5_BACKEND=mock"
@@ -79,7 +84,7 @@ install-linux: $(VENV)/bin/activate
 
 # --- Tests ---
 
-test: test-whatsapp test-mt5
+test: test-whatsapp test-mt5 test-openclaw-hook
 
 test-whatsapp:
 	$(PYTHON) scripts/test_whatsapp.py
@@ -93,6 +98,21 @@ test-mt5: install-prod
 
 test-mt5-mock:
 	$(PYTHON) scripts/test_mt5.py --backend mock --pending
+
+test-openclaw-hook:
+	@mkdir -p data
+	@echo "Installing OpenClaw hook to isolated $(TEST_OPENCLAW_HOME)..."
+	OPENCLAW_HOME="$(TEST_OPENCLAW_HOME)" $(PYTHON) scripts/install_openclaw_hook.py
+	@test -e "$(TEST_OPENCLAW_HOME)/hooks/mt5-whatsapp-commands/HOOK.md"
+	@test -e "$(TEST_OPENCLAW_HOME)/hooks/mt5-whatsapp-commands/handler.ts"
+	@test -f "$(TEST_OPENCLAW_HOME)/openclaw.json" || test -f "$(TEST_OPENCLAW_HOME)/config.json"
+	@echo "OpenClaw hook install test OK ($(TEST_OPENCLAW_HOME))"
+
+test-whatsapp-inbound:
+	@echo "Posting /help to local webhook (requires: make prod)..."
+	$(PYTHON) scripts/whatsapp_inbound_hook.py
+
+test-commands: test-openclaw-hook test-whatsapp-inbound
 
 # --- Run ---
 
