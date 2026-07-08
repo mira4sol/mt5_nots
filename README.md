@@ -265,7 +265,6 @@ openclaw gateway           # restart gateway to load hook
 | `MT5_LOGIN` | Yes | Account number |
 | `MT5_PASSWORD` | Yes | **Investor** (read-only) password |
 | `MT5_SERVER` | Yes | Broker server name |
-| `COMMAND_API_TOKEN` | Recommended | Protects `/api/commands` and WhatsApp webhook |
 | `MT5_BACKEND` | No | `auto` (default), `native`, `bridge`, or `mock` |
 | `MT5_BRIDGE_CLIENT` | No | `auto`, `mt5linux` (Linux VPS), or `mac-bridge` (Mac) |
 | `MT5_BRIDGE_HOST` | No | Default bridge host (per-account override in YAML) |
@@ -296,7 +295,6 @@ openclaw gateway           # restart gateway to load hook
 | `near_trigger.min_pips` | `12` | Min distance before near-trigger alert |
 | `near_trigger.spread_multiplier` | `3` | Adaptive threshold vs spread |
 | `commands.whatsapp_admins` | `[]` | E.164 numbers allowed to run commands |
-| `commands.api_token` | — | From `${COMMAND_API_TOKEN}` in `.env` |
 | `commands.cooldown_seconds` | `30` | Per-sender command cooldown |
 
 ---

@@ -8,19 +8,13 @@ All command endpoints support an optional `send=true` query parameter to deliver
 
 ## Authentication
 
-When `COMMAND_API_TOKEN` is set in `.env`, protected endpoints require:
+API token auth is **disabled** for now — `/api/commands` and `/webhooks/whatsapp/inbound` accept requests without a token.
 
-```http
-X-API-Token: <your-token>
-```
-
-Or:
-
-```http
-Authorization: Bearer <your-token>
-```
-
-`/health` is always public.
+<!--
+When re-enabling, set in config/settings.yaml:
+  api_token: "${COMMAND_API_TOKEN}"
+and add COMMAND_API_TOKEN to .env, then restart the app.
+-->
 
 ## WhatsApp commands
 
@@ -319,7 +313,6 @@ commands:
   whatsapp_admins:
     - "+15551234567"
   cooldown_seconds: 30
-  api_token: "${COMMAND_API_TOKEN}"   # secret from .env
 ```
 
 ### `config/accounts.yaml` (per investor group)
@@ -334,11 +327,10 @@ accounts:
 
 **Routing rule:** inbound `group_jid` must match exactly one account's `whatsapp_target`.
 
-### `.env` (secrets only)
+### `.env` (optional deployment overrides)
 
 | Variable | Description |
 |----------|-------------|
-| `COMMAND_API_TOKEN` | API token for `/api/commands` and webhook |
 | `MT5_TRIGGER_WEBHOOK_URL` | Optional OpenClaw hook → mt5_trigger webhook override |
 | `HEALTH_HOST` / `HEALTH_PORT` | HTTP server bind (optional) |
 

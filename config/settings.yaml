@@ -20,4 +20,4 @@ commands:
   whatsapp_admins:
     - "+2349050273391"
   cooldown_seconds: 30
-  api_token: "${COMMAND_API_TOKEN}"
+  # api_token disabled temporarily — /api/commands and webhook are open

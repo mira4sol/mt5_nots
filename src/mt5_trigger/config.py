@@ -221,9 +221,7 @@ def apply_env_to_settings(settings: AppSettings) -> AppSettings:
         updates["health_host"] = host
 
     cmd_updates: dict[str, Any] = {}
-    api_token = strip_env_value(os.environ.get("COMMAND_API_TOKEN", ""))
-    if api_token:
-        cmd_updates["api_token"] = api_token
+    # api_token auth disabled temporarily — skip COMMAND_API_TOKEN from .env
     cooldown = strip_env_value(os.environ.get("COMMAND_COOLDOWN_SECONDS", ""))
     if cooldown:
         cmd_updates["cooldown_seconds"] = float(cooldown)
