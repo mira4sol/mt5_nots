@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from mt5_trigger.config import AccountConfig, normalize_account_config
@@ -23,6 +23,13 @@ from mt5_trigger.mt5.backend import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _mt5_datetime(dt: datetime) -> datetime:
+    """mt5linux cannot serialize tz-aware datetimes over the bridge — use naive UTC."""
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 @dataclass
@@ -230,7 +237,12 @@ class MT5Client:
         self._ensure_connected()
         if not self._mt5.symbol_select(symbol, True):
             logger.warning("Could not select symbol %s", symbol)
-        rates = self._mt5.copy_rates_from(symbol, timeframe, datetime.now(), count)
+        rates = self._mt5.copy_rates_from(
+            symbol,
+            timeframe,
+            _mt5_datetime(datetime.now(timezone.utc)),
+            count,
+        )
         if rates is None:
             return []
         return [
@@ -285,7 +297,8 @@ class MT5Client:
     ) -> dict[int, list[ClosedDeal]]:
         """Exit deals grouped by position_id for recovery of missed close alerts."""
         self._ensure_connected()
-        until = until or datetime.now()
+        until = _mt5_datetime(until or datetime.now(timezone.utc))
+        since = _mt5_datetime(since)
         deals = self._mt5.history_deals_get(since, until)
         if deals is None:
             return {}
@@ -296,14 +309,20 @@ class MT5Client:
 
     def get_weekly_closed_deals(self, week_start: datetime, week_end: datetime) -> list[ClosedDeal]:
         self._ensure_connected()
-        deals = self._mt5.history_deals_get(week_start, week_end)
+        deals = self._mt5.history_deals_get(
+            _mt5_datetime(week_start),
+            _mt5_datetime(week_end),
+        )
         if deals is None:
             return []
         return self._filter_exit_deals(deals)
 
     def get_daily_closed_deals(self, day_start: datetime, day_end: datetime) -> list[ClosedDeal]:
         self._ensure_connected()
-        deals = self._mt5.history_deals_get(day_start, day_end)
+        deals = self._mt5.history_deals_get(
+            _mt5_datetime(day_start),
+            _mt5_datetime(day_end),
+        )
         if deals is None:
             return []
         return self._filter_exit_deals(deals)

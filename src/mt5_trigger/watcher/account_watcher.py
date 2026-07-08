@@ -297,7 +297,15 @@ class AccountWatcher:
 
     def _recover_missed_closes(self, now_et: datetime) -> None:
         since = now_et - RECOVERY_LOOKBACK
-        grouped = self.client.get_recent_closed_positions(since, now_et)
+        try:
+            grouped = self.client.get_recent_closed_positions(since, now_et)
+        except Exception:
+            logger.warning(
+                "Missed close recovery skipped for %s",
+                self.account.name,
+                exc_info=True,
+            )
+            return
         if not grouped:
             return
 

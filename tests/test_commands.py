@@ -25,6 +25,18 @@ def test_parse_chart_command() -> None:
     assert service.parse_command("/chart") == "chart"
 
 
+def test_mt5_datetime_strips_timezone_for_bridge() -> None:
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    from mt5_trigger.mt5.client import _mt5_datetime
+
+    aware = datetime(2026, 7, 8, 10, 53, 15, tzinfo=ZoneInfo("America/New_York"))
+    naive_utc = _mt5_datetime(aware)
+    assert naive_utc.tzinfo is None
+    assert naive_utc.hour in {14, 15}  # depends on DST; just ensure converted
+
+
 def test_guide_lists_chart_command() -> None:
     service = CommandService(_minimal_config())
     account = MagicMock(name="valetax_main")
