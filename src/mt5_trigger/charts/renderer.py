@@ -40,7 +40,11 @@ MAX_CHART_WIDTH_PX = 2048
 MAX_CHART_HEIGHT_PX = 2048
 CHART_DPI = 130
 
-MAX_PENDING_ON_CHART = 3
+# Line weights — last price stays boldest
+LINE_LAST = 2.0
+LINE_TRIGGER = 0.9
+LINE_ENTRY = 1.0
+LINE_SL_TP = 0.75
 
 
 @dataclass(frozen=True)
@@ -48,9 +52,10 @@ class ChartLine:
     price: float
     tag: str
     color: str
+    kind: str = "level"
     linestyle: str = "-"
-    linewidth: float = 1.2
-    alpha: float = 0.95
+    linewidth: float = 1.0
+    alpha: float = 0.9
     zorder: int = 3
 
 
@@ -133,106 +138,124 @@ def _build_overlays(
             last_close,
             f"{last_close:.2f}",
             LAST_PRICE,
+            kind="last",
             linestyle="-",
-            linewidth=2.2,
+            linewidth=LINE_LAST,
             zorder=10,
         )
     )
 
     symbol_pending = [o for o in pending_orders if o.symbol == symbol]
     if tick is not None and symbol_pending:
-        ranked = sorted(
-            symbol_pending,
-            key=lambda o: distance_to_trigger(o, tick),
-        )
+        ranked = sorted(symbol_pending, key=lambda o: distance_to_trigger(o, tick))
     else:
         ranked = symbol_pending
 
-    for order in ranked[:MAX_PENDING_ON_CHART]:
-        label = f"#{order.ticket} {order.order_type_label.split()[0]} {order.price_open:.2f}"
+    for order in ranked:
+        trigger_label = f"TRIGGER #{order.ticket} {order.order_type_label} {order.price_open:.2f}"
+        short_label = f"#{order.ticket} {order.order_type_label} {order.price_open:.2f}"
         if _in_range(order.price_open, y_min, y_max):
             lines.append(
                 ChartLine(
                     order.price_open,
-                    label,
+                    trigger_label,
                     PENDING,
-                    linestyle="--",
-                    linewidth=1.4,
-                    zorder=6,
+                    kind="trigger",
+                    linestyle=(0, (6, 4)),
+                    linewidth=LINE_TRIGGER,
+                    zorder=5,
                 )
             )
         elif order.price_open > y_max:
-            pending_above.append(label)
+            pending_above.append(short_label)
         else:
-            pending_below.append(label)
+            pending_below.append(short_label)
 
-    for order in ranked[MAX_PENDING_ON_CHART:]:
-        label = f"#{order.ticket} {order.order_type_label.split()[0]} {order.price_open:.2f}"
-        if order.price_open > y_max:
-            pending_above.append(label)
-        else:
-            pending_below.append(label)
-
-    position_prices: list[float] = []
     for pos in positions:
         if pos.symbol != symbol:
             continue
         side = "BUY" if pos.position_type == 0 else "SELL"
-        position_prices.extend([p for p in (pos.price_open, pos.sl, pos.tp) if p > 0])
 
         if _in_range(pos.price_open, y_min, y_max):
             lines.append(
                 ChartLine(
                     pos.price_open,
-                    f"ENTRY {side} {pos.price_open:.2f}",
+                    f"ENTRY #{pos.ticket} {side} {pos.price_open:.2f}",
                     ENTRY,
-                    linewidth=1.8,
-                    zorder=7,
+                    kind="entry",
+                    linestyle="-",
+                    linewidth=LINE_ENTRY,
+                    zorder=6,
                 )
             )
         if pos.sl > 0 and _in_range(pos.sl, y_min, y_max):
             lines.append(
                 ChartLine(
                     pos.sl,
-                    f"SL {pos.sl:.2f}",
+                    f"SL #{pos.ticket} {pos.sl:.2f}",
                     SL_COLOR,
-                    linewidth=1.6,
-                    zorder=7,
+                    kind="sl",
+                    linestyle=(0, (4, 4)),
+                    linewidth=LINE_SL_TP,
+                    alpha=0.85,
+                    zorder=4,
                 )
             )
         if pos.tp > 0 and _in_range(pos.tp, y_min, y_max):
             lines.append(
                 ChartLine(
                     pos.tp,
-                    f"TP {pos.tp:.2f}",
+                    f"TP #{pos.ticket} {pos.tp:.2f}",
                     TP_COLOR,
-                    linewidth=1.6,
-                    zorder=7,
+                    kind="tp",
+                    linestyle=(0, (4, 4)),
+                    linewidth=LINE_SL_TP,
+                    alpha=0.85,
+                    zorder=4,
                 )
             )
 
-    # De-dupe lines at same price (keep highest zorder / first)
-    seen: dict[float, ChartLine] = {}
+    # Keep last price if two levels share the same rounded price
+    deduped: dict[tuple[float, str], ChartLine] = {}
     for line in sorted(lines, key=lambda item: item.zorder, reverse=True):
-        key = round(line.price, 2)
-        if key not in seen:
-            seen[key] = line
-    ordered = sorted(seen.values(), key=lambda item: item.price)
+        key = (round(line.price, 2), line.kind)
+        if key not in deduped:
+            deduped[key] = line
+    ordered = sorted(deduped.values(), key=lambda item: item.price)
 
     summary = OffChartSummary(
-        pending_above=pending_above[:6],
-        pending_below=pending_below[:6],
+        pending_above=pending_above[:8],
+        pending_below=pending_below[:8],
     )
     return ordered, summary
+
+
+def _label_y_offsets(lines: list[ChartLine], y_min: float, y_max: float) -> list[float]:
+    """Nudge right-side labels apart when prices are very close."""
+    span = max(y_max - y_min, 0.01)
+    min_gap = span * 0.016
+    bump = span * 0.012
+    offsets = [0.0] * len(lines)
+    sorted_idx = sorted(range(len(lines)), key=lambda i: lines[i].price)
+    placed: list[float] = []
+    for idx in sorted_idx:
+        base = lines[idx].price
+        y = base
+        while any(abs(y - p) < min_gap for p in placed):
+            y += bump
+        offsets[idx] = y - base
+        placed.append(y)
+    return offsets
 
 
 def _draw_price_tag(
     ax: plt.Axes,
     line: ChartLine,
     *,
-    highlight: bool = False,
+    label_y_offset: float = 0.0,
 ) -> None:
     trans = blended_transform_factory(ax.transAxes, ax.transData)
+    is_last = line.kind == "last"
     ax.axhline(
         line.price,
         color=line.color,
@@ -244,15 +267,26 @@ def _draw_price_tag(
         xmax=0.996,
     )
 
-    fontsize = 9 if highlight else 7.5
-    weight = "bold" if highlight else "normal"
-    face = line.color if highlight else "#1e222d"
-    edge = line.color
-    text_color = "#ffffff" if highlight else line.color
+    if is_last:
+        fontsize, weight = 9, "bold"
+        face, edge, text_color = line.color, line.color, "#ffffff"
+        edge_width = 1.2
+    elif line.kind == "trigger":
+        fontsize, weight = 7, "normal"
+        face, edge, text_color = "#1e222d", line.color, line.color
+        edge_width = 0.7
+    elif line.kind == "entry":
+        fontsize, weight = 7.5, "bold"
+        face, edge, text_color = "#1e222d", line.color, line.color
+        edge_width = 0.8
+    else:
+        fontsize, weight = 7, "normal"
+        face, edge, text_color = "#1e222d", line.color, line.color
+        edge_width = 0.6
 
     ax.text(
         1.002,
-        line.price,
+        line.price + label_y_offset,
         f" {line.tag} ",
         transform=trans,
         color=text_color,
@@ -263,10 +297,10 @@ def _draw_price_tag(
         clip_on=True,
         zorder=line.zorder + 1,
         bbox={
-            "boxstyle": "round,pad=0.25",
-            "facecolor": face if highlight else "#1e222d",
+            "boxstyle": "round,pad=0.22",
+            "facecolor": face,
             "edgecolor": edge,
-            "linewidth": 1.2 if highlight else 0.8,
+            "linewidth": edge_width,
             "alpha": 0.98,
         },
     )
@@ -454,14 +488,12 @@ def render_symbol_chart(
     x_end = len(df) - 1
     ax.axvspan(x_end - 0.5, x_end + 0.5, color=LAST_PRICE, alpha=0.06, zorder=1)
 
-    for line in lines:
-        highlight = line.color == LAST_PRICE
-        _draw_price_tag(ax, line, highlight=highlight)
+    for line, y_offset in zip(lines, _label_y_offsets(lines, y_min, y_max), strict=True):
+        _draw_price_tag(ax, line, label_y_offset=y_offset)
 
     _draw_offscreen_note(ax, offscreen)
 
-    # Compact legend
-    legend = "Last price  ·  Pending (nearest)  ·  Entry / SL / TP"
+    legend = "Blue = last price  ·  Orange dashed = trigger  ·  Purple = entry  ·  Red/Green = SL/TP"
     fig.text(0.03, 0.03, legend, color=MUTED, fontsize=8, ha="left")
 
     fig.subplots_adjust(left=0.06, right=0.74, top=0.80, bottom=0.10, hspace=0.04)

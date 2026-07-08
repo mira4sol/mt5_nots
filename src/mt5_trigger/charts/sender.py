@@ -122,7 +122,7 @@ def send_live_chart(
         notifier = OpenClawNotifier(settings, whatsapp_target)
         sent = notifier.send_media(
             output_path,
-            message=caption,
+            message="",
             target=whatsapp_target,
             force_document=force_document,
         )
