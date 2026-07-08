@@ -57,10 +57,13 @@ class OpenClawNotifier:
     ) -> bool:
         dest = target or self.default_target
         if not dest:
-            logger.error("No WhatsApp target configured; skipping send")
+            logger.error("WhatsApp send skipped: no target configured")
             return False
         if not message and media_path is None:
-            logger.error("Nothing to send: message and media are both empty")
+            logger.error(
+                "WhatsApp send skipped: empty message and no media (target=%s)",
+                dest,
+            )
             return False
 
         cmd = [
@@ -83,6 +86,8 @@ class OpenClawNotifier:
 
         max_retries = self.settings.openclaw.max_retries
         base = self.settings.openclaw.retry_base_seconds
+        kind = "media" if media_path is not None else "text"
+        last_detail = ""
 
         for attempt in range(max_retries):
             try:
@@ -94,21 +99,46 @@ class OpenClawNotifier:
                     check=False,
                 )
                 if result.returncode == 0:
-                    logger.info("WhatsApp message sent via OpenClaw")
+                    logger.info(
+                        "WhatsApp %s sent via OpenClaw (target=%s reply_to=%s)",
+                        kind,
+                        dest,
+                        reply_to or "-",
+                    )
                     return True
+                last_detail = (result.stderr or result.stdout or "").strip()
                 logger.warning(
-                    "OpenClaw send failed (attempt %d/%d): %s",
+                    "OpenClaw send failed (attempt %d/%d, kind=%s, target=%s, "
+                    "reply_to=%s, timeout=%ss): %s",
                     attempt + 1,
                     max_retries,
-                    result.stderr or result.stdout,
+                    kind,
+                    dest,
+                    reply_to or "-",
+                    self.settings.openclaw.send_timeout_seconds,
+                    last_detail or "(no output)",
                 )
             except (subprocess.SubprocessError, OSError) as exc:
+                last_detail = str(exc)
                 logger.warning(
-                    "OpenClaw send error (attempt %d/%d): %s",
+                    "OpenClaw send error (attempt %d/%d, kind=%s, target=%s, "
+                    "reply_to=%s, timeout=%ss): %s",
                     attempt + 1,
                     max_retries,
+                    kind,
+                    dest,
+                    reply_to or "-",
+                    self.settings.openclaw.send_timeout_seconds,
                     exc,
                 )
             if attempt < max_retries - 1:
                 time.sleep(base * (2**attempt))
+        logger.error(
+            "WhatsApp %s not delivered after %d attempts (target=%s reply_to=%s): %s",
+            kind,
+            max_retries,
+            dest,
+            reply_to or "-",
+            last_detail or "unknown error",
+        )
         return False

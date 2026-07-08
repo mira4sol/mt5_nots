@@ -275,12 +275,17 @@ function authHeaders(config: PluginRuntimeConfig): Record<string, string> {
   return headers;
 }
 
+export type Mt5CommandFetchResult = {
+  message: string;
+  sent: boolean;
+};
+
 export async function fetchMt5Command(
   config: PluginRuntimeConfig,
   command: string,
   account: string,
   options: { send?: boolean; replyTo?: string | null; target?: string | null } = {},
-): Promise<string> {
+): Promise<Mt5CommandFetchResult> {
   // mt5_trigger sends directly to WhatsApp with --reply-to when send=true.
   // The plugin returns suppressReply so OpenClaw does not post a duplicate.
   const send = options.send ?? true;
@@ -300,6 +305,7 @@ export async function fetchMt5Command(
   const response = await fetch(url, { headers: authHeaders(config) });
   const body = (await response.json()) as {
     message?: string;
+    sent?: boolean;
     error?: string;
     detail?: string;
   };
@@ -310,7 +316,11 @@ export async function fetchMt5Command(
   if (body.error) {
     throw new Error(body.error);
   }
-  return body.message || "OK";
+  const sent = body.sent === true;
+  return {
+    message: body.message || "OK",
+    sent: send ? sent : false,
+  };
 }
 
 export async function postInbound(

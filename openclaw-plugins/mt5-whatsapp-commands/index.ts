@@ -211,15 +211,25 @@ export default definePluginEntry({
         log(
           `command /${command} sender=${sender} group=${groupJid} account=${account} replyTo=${replyTo || '(none)'}`,
         )
-        await fetchMt5Command(config, command, account, {
+        const result = await fetchMt5Command(config, command, account, {
           send: true,
           replyTo,
           target: groupJid,
         })
+        if (!result.sent) {
+          api.logger.error(
+            `[mt5-whatsapp-commands] /${command} WhatsApp delivery failed ` +
+              `(account=${account} group=${groupJid} replyTo=${replyTo || 'none'})`,
+          )
+          return { suppressReply: true }
+        }
+        log(`command /${command} delivered (${result.message.length} chars)`)
         return { suppressReply: true }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error)
-        api.logger.error(`[mt5-whatsapp-commands] /${command} failed: ${msg}`)
+        api.logger.error(
+          `[mt5-whatsapp-commands] /${command} failed before delivery: ${msg}`,
+        )
         return { text: `MT5 error: ${msg}` }
       }
     }

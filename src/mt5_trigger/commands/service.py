@@ -115,9 +115,21 @@ class CommandService:
         account: AccountConfig,
         target: str,
         reply_to: str | None = None,
+        command: str | None = None,
     ) -> bool:
         notifier = OpenClawNotifier(self.config.settings, target)
-        return notifier.send(message, target=target, reply_to=reply_to)
+        sent = notifier.send(message, target=target, reply_to=reply_to)
+        if not sent:
+            logger.error(
+                "Command reply not delivered: command=%s account=%s target=%s "
+                "reply_to=%s message_len=%d",
+                command or "-",
+                account.name,
+                target,
+                reply_to or "-",
+                len(message),
+            )
+        return sent
 
     def handle_inbound(
         self,
@@ -154,17 +166,18 @@ class CommandService:
             )
             if account is None:
                 return None
-            self._send_reply(
+            cooldown_sent = self._send_reply(
                 message="Please wait before sending another command.",
                 account=account,
                 target=group_jid,
                 reply_to=message_id,
+                command=command,
             )
             return CommandResult(
                 command=command,
                 account=account.name,
                 message="Please wait before sending another command.",
-                sent=True,
+                sent=cooldown_sent,
             )
 
         account = resolve_command_account(
@@ -184,14 +197,28 @@ class CommandService:
             reply_to=message_id,
         )
         if result.error:
+            logger.error(
+                "Command %s failed for %s in %s: %s",
+                command,
+                account.name,
+                group_jid,
+                result.error,
+            )
             self._send_reply(
                 message=f"MT5 error: {result.error}",
                 account=account,
                 target=group_jid,
                 reply_to=message_id,
+                command=command,
             )
-            result.sent = True
-        elif result.error is None:
+        elif not result.sent:
+            logger.error(
+                "Command %s completed but WhatsApp delivery failed for %s in %s",
+                command,
+                account.name,
+                group_jid,
+            )
+        else:
             self.mark_cooldown(sender, group_jid)
         return result
 
@@ -263,14 +290,8 @@ class CommandService:
                 account=account,
                 target=dest,
                 reply_to=reply_to,
+                command=command,
             )
-            if not sent and message:
-                return CommandResult(
-                    command=command,
-                    account=account.name,
-                    message=message,
-                    error="Failed to send WhatsApp reply via OpenClaw",
-                )
 
         return CommandResult(
             command=command,
@@ -382,14 +403,36 @@ class CommandService:
         charts_dir = self.config.settings.db_path_resolved.parent / "charts"
         from mt5_trigger.charts.sender import send_live_chart
 
-        result = send_live_chart(
-            client=client,
-            settings=self.config.settings,
-            charts_dir=charts_dir,
-            whatsapp_target=dest,
-            send=True,
-            reply_to=reply_to,
-        )
+        try:
+            result = send_live_chart(
+                client=client,
+                settings=self.config.settings,
+                charts_dir=charts_dir,
+                whatsapp_target=dest,
+                send=True,
+                reply_to=reply_to,
+            )
+        except RuntimeError as exc:
+            logger.error(
+                "Chart command delivery failed for %s (target=%s reply_to=%s): %s",
+                account.name,
+                dest,
+                reply_to or "-",
+                exc,
+            )
+            return CommandResult(
+                command="chart",
+                account=account.name,
+                message="",
+                sent=False,
+            )
+        if not result.sent:
+            logger.error(
+                "Chart command delivery failed for %s (target=%s reply_to=%s)",
+                account.name,
+                dest,
+                reply_to or "-",
+            )
         return CommandResult(
             command="chart",
             account=account.name,

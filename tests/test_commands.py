@@ -77,11 +77,48 @@ def test_fetch_mt5_command_sends_with_reply_to() -> None:
         __import__("pathlib").Path(__file__).resolve().parents[1]
         / "openclaw-plugins/mt5-whatsapp-commands/index.ts"
     ).read_text(encoding="utf-8")
-    assert "send=true" in forward_ts or "send: true" in index_ts
+    assert "send: true" in index_ts
     assert 'params.set("reply_to"' in forward_ts
     assert 'params.set("target"' in forward_ts
+    assert "body.sent === true" in forward_ts
+    assert "WhatsApp delivery failed" in index_ts
     assert "message_received" in index_ts
     assert "suppressReply: true" in index_ts
+
+
+def test_run_command_send_failure_returns_sent_false_without_error() -> None:
+    from unittest.mock import patch
+
+    from mt5_trigger.commands.service import CommandService
+    from mt5_trigger.config import AccountConfig, AppConfig, AppSettings, CommandsSettings
+
+    config = AppConfig(
+        settings=AppSettings(commands=CommandsSettings(enabled=True)),
+        accounts=[
+            AccountConfig(
+                name="valetax_main",
+                login="1",
+                password="x",
+                server="MetaQuotes-Demo",
+                whatsapp_target="120363428584387160@g.us",
+            )
+        ],
+    )
+    service = CommandService(config)
+    account = config.accounts[0]
+
+    with patch.object(service, "_execute", return_value="Open positions (0):"):
+        with patch.object(service, "_send_reply", return_value=False):
+            result = service.run_command(
+                "positions",
+                account_name=account.name,
+                send=True,
+                target=account.whatsapp_target,
+            )
+
+    assert result.sent is False
+    assert result.error is None
+    assert result.message == "Open positions (0):"
 
 
 def test_plugin_uses_message_cache() -> None:
