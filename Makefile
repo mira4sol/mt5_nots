@@ -1,5 +1,5 @@
 .PHONY: help install install-dev install-prod install-native install-bridge install-linux setup \
-        test test-whatsapp test-mt5 test-mt5-mock test-openclaw-hook test-whatsapp-inbound test-commands \
+        test test-whatsapp test-mt5 test-mt5-mock test-openclaw-hook test-whatsapp-inbound test-commands diagnose-whatsapp \
         dev prod run health \
         deploy deploy-prereqs pm2-start pm2-stop pm2-logs pm2-status install-openclaw-hook
 
@@ -44,6 +44,7 @@ help:
 	@echo "  make run            Alias for prod"
 	@echo "  make health         Curl local /health endpoint"
 	@echo "  make install-openclaw-hook  Wire WhatsApp group commands via OpenClaw"
+	@echo "  make diagnose-whatsapp       Check OpenClaw + webhook wiring"
 	@echo ""
 	@echo "Deploy (VPS):"
 	@echo "  make deploy         git pull, install deps, restart PM2"
@@ -105,7 +106,9 @@ test-openclaw-hook:
 	OPENCLAW_HOME="$(TEST_OPENCLAW_HOME)" $(PYTHON) scripts/install_openclaw_hook.py
 	@test -e "$(TEST_OPENCLAW_HOME)/hooks/mt5-whatsapp-commands/HOOK.md"
 	@test -e "$(TEST_OPENCLAW_HOME)/hooks/mt5-whatsapp-commands/handler.ts"
+	@test -e "$(TEST_OPENCLAW_HOME)/plugins/mt5-whatsapp-commands/index.ts"
 	@test -f "$(TEST_OPENCLAW_HOME)/openclaw.json" || test -f "$(TEST_OPENCLAW_HOME)/config.json"
+	@python3 -c "import json, pathlib; p=pathlib.Path('$(TEST_OPENCLAW_HOME)/openclaw.json'); c=json.loads(p.read_text()); assert c['channels']['whatsapp']['pluginHooks']['messageReceived'] is True; assert c['plugins']['entries']['mt5-whatsapp-commands']['enabled'] is True"
 	@echo "OpenClaw hook install test OK ($(TEST_OPENCLAW_HOME))"
 
 test-whatsapp-inbound:
@@ -128,6 +131,9 @@ health:
 
 install-openclaw-hook:
 	$(PYTHON) scripts/install_openclaw_hook.py
+
+diagnose-whatsapp:
+	$(PYTHON) scripts/diagnose_whatsapp_commands.py
 
 # --- Deploy (VPS) ---
 

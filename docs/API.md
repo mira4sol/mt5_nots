@@ -232,7 +232,7 @@ After install, group slash commands work end-to-end:
 ```text
 Admin sends /positions in WhatsApp group
         ↓
-OpenClaw gateway (message:received hook)
+OpenClaw gateway (plugin message_received hook)
         ↓
 POST /webhooks/whatsapp/inbound
         ↓
@@ -242,15 +242,15 @@ mt5_trigger runs command + replies to group
 ### One-time setup on the server
 
 ```bash
-# From the mt5_trigger repo (reads .env for group JID, token, webhook URL)
+# From the mt5_trigger repo (reads accounts.yaml + settings.yaml)
 make install-openclaw-hook
 
-# Restart OpenClaw so the hook loads
-openclaw gateway
+# Restart OpenClaw so the plugin loads
+openclaw gateway restart
 ```
 
-This installs `openclaw-hooks/mt5-whatsapp-commands` into `~/.openclaw/hooks/`,
-enables it in OpenClaw config, and forwards only:
+This installs `openclaw-plugins/mt5-whatsapp-commands` into `~/.openclaw/plugins/`,
+enables `channels.whatsapp.pluginHooks.messageReceived`, and forwards only:
 
 - WhatsApp channel messages
 - From any account `whatsapp_target` group JID in `config/accounts.yaml`
@@ -261,8 +261,8 @@ enables it in OpenClaw config, and forwards only:
 Verify:
 
 ```bash
-openclaw hooks list | grep mt5-whatsapp-commands
-openclaw hooks info mt5-whatsapp-commands
+make diagnose-whatsapp
+openclaw plugins list | grep mt5-whatsapp-commands
 ```
 
 Then in the group (as an admin in `commands.whatsapp_admins`):
@@ -285,17 +285,35 @@ The hook above replaces manual wiring. For debugging you can still POST directly
   --group-jid "120363428584387160@g.us"
 ```
 
-Configure OpenClaw WhatsApp access (in `~/.openclaw/openclaw.json`):
+Configure OpenClaw WhatsApp access (in `~/.openclaw/openclaw.json`).
+`make install-openclaw-hook` sets `pluginHooks.messageReceived` and group entries
+automatically; merge with your existing config:
 
 ```json5
 {
   channels: {
     whatsapp: {
+      enabled: true,
+      dmPolicy: "disabled",
       groupPolicy: "allowlist",
-      groupAllowFrom: ["+15551234567"],
+      groupAllowFrom: ["+2349050273391"],
+      pluginHooks: {
+        messageReceived: true,  // required — WhatsApp hides inbound from plugins by default
+      },
       groups: {
         "120363428584387160@g.us": {
           requireMention: false,
+        },
+      },
+    },
+  },
+  plugins: {
+    entries: {
+      "mt5-whatsapp-commands": {
+        enabled: true,
+        config: {
+          webhookUrl: "http://127.0.0.1:8080/webhooks/whatsapp/inbound",
+          groupJids: ["120363428584387160@g.us"],
         },
       },
     },

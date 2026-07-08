@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 
 def _normalize_phone(number: str) -> str:
     number = strip_env_value(number)
+    if not number:
+        return number
+    if "@" in number:
+        number = number.split("@", 1)[0]
+    number = number.strip()
     if number and not number.startswith("+"):
         return f"+{number}"
     return number

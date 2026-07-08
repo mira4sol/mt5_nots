@@ -100,11 +100,17 @@ class CommandService:
         if not self.config.settings.commands.enabled:
             return None
         if not self.is_allowed_group(group_jid):
-            logger.debug("Ignoring message from unknown group %s", group_jid)
+            logger.info("Ignoring message from unknown group %s", group_jid)
             return None
         command = self.parse_command(text)
         if command is None:
             return None
+        logger.info(
+            "Inbound WhatsApp command %s from %s in %s",
+            command,
+            sender,
+            group_jid,
+        )
         if not self.is_allowed_sender(sender):
             logger.info("Ignoring command from non-admin sender %s", sender)
             return None

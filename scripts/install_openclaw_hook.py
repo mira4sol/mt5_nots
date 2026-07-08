@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install and enable the mt5-whatsapp-commands OpenClaw hook."""
+"""Install mt5-whatsapp-commands OpenClaw plugin + internal hook fallback."""
 
 from __future__ import annotations
 
@@ -15,13 +15,15 @@ from dotenv import dotenv_values
 from mt5_trigger.config import command_group_jids, enabled_accounts, load_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-HOOK_SOURCE = PROJECT_ROOT / "openclaw-hooks" / "mt5-whatsapp-commands"
+PLUGIN_SOURCE = PROJECT_ROOT / "openclaw-plugins" / "mt5-whatsapp-commands"
 OPENCLAW_HOME = Path(os.environ.get("OPENCLAW_HOME", Path.home() / ".openclaw"))
+PLUGIN_DEST = OPENCLAW_HOME / "plugins" / "mt5-whatsapp-commands"
 HOOK_DEST = OPENCLAW_HOME / "hooks" / "mt5-whatsapp-commands"
 CONFIG_CANDIDATES = [
     OPENCLAW_HOME / "openclaw.json",
     OPENCLAW_HOME / "config.json",
 ]
+PLUGIN_ID = "mt5-whatsapp-commands"
 
 
 def _webhook_url(config) -> str:
@@ -58,38 +60,92 @@ def _save_json(path: Path, data: dict) -> None:
         f.write("\n")
 
 
-def _patch_config(config_path: Path, hook_env: dict[str, str]) -> None:
+def _link_or_copy(source: Path, dest: Path) -> None:
+    if dest.exists() or dest.is_symlink():
+        if dest.is_symlink() or dest.is_file():
+            dest.unlink()
+        else:
+            shutil.rmtree(dest)
+    try:
+        dest.symlink_to(source)
+    except OSError:
+        if source.is_dir():
+            shutil.copytree(source, dest)
+        else:
+            shutil.copy2(source, dest)
+
+
+def _patch_config(
+    config_path: Path,
+    *,
+    hook_env: dict[str, str],
+    plugin_config: dict[str, object],
+    group_jids: list[str],
+) -> None:
     if config_path.exists():
         config = _load_json(config_path)
     else:
         config = {}
 
+    channels = config.setdefault("channels", {})
+    whatsapp = channels.setdefault("whatsapp", {})
+    whatsapp["enabled"] = whatsapp.get("enabled", True)
+    plugin_hooks = whatsapp.setdefault("pluginHooks", {})
+    plugin_hooks["messageReceived"] = True
+
+    for group_jid in group_jids:
+        groups = whatsapp.setdefault("groups", {})
+        group_entry = groups.setdefault(group_jid, {})
+        if "requireMention" not in group_entry:
+            group_entry["requireMention"] = False
+
+    plugins = config.setdefault("plugins", {})
+    entries = plugins.setdefault("entries", {})
+    entries[PLUGIN_ID] = {
+        "enabled": True,
+        "config": plugin_config,
+    }
+    load_paths = plugins.setdefault("load", {}).setdefault("paths", [])
+    plugin_path = str(PLUGIN_DEST)
+    if plugin_path not in load_paths:
+        load_paths.append(plugin_path)
+
     hooks = config.setdefault("hooks", {})
     internal = hooks.setdefault("internal", {})
     internal["enabled"] = True
-    entries = internal.setdefault("entries", {})
-    entries["mt5-whatsapp-commands"] = {
+    internal_entries = internal.setdefault("entries", {})
+    internal_entries[PLUGIN_ID] = {
         "enabled": True,
         "env": hook_env,
     }
+
     _save_json(config_path, config)
 
 
-def _run_openclaw_enable() -> None:
+def _run_openclaw(*args: str) -> subprocess.CompletedProcess[str] | None:
     try:
-        subprocess.run(
-            ["openclaw", "hooks", "enable", "mt5-whatsapp-commands"],
+        return subprocess.run(
+            ["openclaw", *args],
             check=False,
             capture_output=True,
             text=True,
         )
     except FileNotFoundError:
-        print("NOTE: openclaw CLI not found; config was patched manually.")
+        return None
+
+
+def _install_plugin() -> str:
+    result = _run_openclaw("plugins", "install", "--link", str(PLUGIN_SOURCE))
+    if result is not None and result.returncode == 0:
+        return "openclaw plugins install --link"
+
+    _link_or_copy(PLUGIN_SOURCE, PLUGIN_DEST)
+    return f"symlink {PLUGIN_DEST}"
 
 
 def main() -> int:
-    if not HOOK_SOURCE.exists():
-        print(f"ERROR: hook source missing: {HOOK_SOURCE}", file=sys.stderr)
+    if not PLUGIN_SOURCE.exists():
+        print(f"ERROR: plugin source missing: {PLUGIN_SOURCE}", file=sys.stderr)
         return 1
 
     config = load_config()
@@ -103,44 +159,57 @@ def main() -> int:
         )
         return 1
 
+    webhook_url = _webhook_url(config)
     hook_env = {
         "WHATSAPP_GROUP_JIDS": ",".join(group_jids),
-        "MT5_TRIGGER_WEBHOOK_URL": _webhook_url(config),
+        "MT5_TRIGGER_WEBHOOK_URL": webhook_url,
+    }
+    plugin_config: dict[str, object] = {
+        "webhookUrl": webhook_url,
+        "groupJids": group_jids,
     }
     token = config.settings.commands.api_token.strip()
-    
     if token:
         hook_env["COMMAND_API_TOKEN"] = token
+        plugin_config["apiToken"] = token
 
     OPENCLAW_HOME.mkdir(parents=True, exist_ok=True)
+    (OPENCLAW_HOME / "plugins").mkdir(parents=True, exist_ok=True)
     (OPENCLAW_HOME / "hooks").mkdir(parents=True, exist_ok=True)
 
-    if HOOK_DEST.exists() or HOOK_DEST.is_symlink():
-        if HOOK_DEST.is_symlink() or HOOK_DEST.is_file():
-            HOOK_DEST.unlink()
-        else:
-            shutil.rmtree(HOOK_DEST)
-
-    try:
-        HOOK_DEST.symlink_to(HOOK_SOURCE)
-    except OSError:
-        shutil.copytree(HOOK_SOURCE, HOOK_DEST)
+    plugin_method = _install_plugin()
+    _link_or_copy(PLUGIN_SOURCE, HOOK_DEST)
 
     config_path = _find_config_path()
-    _patch_config(config_path, hook_env)
-    _run_openclaw_enable()
+    _patch_config(
+        config_path,
+        hook_env=hook_env,
+        plugin_config=plugin_config,
+        group_jids=group_jids,
+    )
 
-    print("Installed OpenClaw hook: mt5-whatsapp-commands")
+    enable_hook = _run_openclaw("hooks", "enable", PLUGIN_ID)
+    enable_plugin = _run_openclaw("plugins", "enable", PLUGIN_ID)
+
+    print("Installed MT5 WhatsApp command bridge")
+    print(f"  plugin     : {PLUGIN_DEST} ({plugin_method})")
     print(f"  hook dir   : {HOOK_DEST}")
     print(f"  config     : {config_path}")
     print(f"  group jids : {', '.join(group_jids)}")
     for account in accounts:
         if account.whatsapp_target in group_jids:
             print(f"    {account.whatsapp_target} -> {account.name}")
-    print(f"  webhook    : {hook_env['MT5_TRIGGER_WEBHOOK_URL']}")
+    print(f"  webhook    : {webhook_url}")
+    print("  whatsapp   : pluginHooks.messageReceived = true")
+    if enable_hook is None or enable_plugin is None:
+        print("")
+        print("NOTE: openclaw CLI not found; config was patched manually.")
     print("")
-    print("Restart the OpenClaw gateway so the hook loads:")
-    print("  openclaw gateway")
+    print("Restart the OpenClaw gateway so the plugin loads:")
+    print("  openclaw gateway restart")
+    print("")
+    print("Then verify:")
+    print("  make diagnose-whatsapp")
     return 0
 
 

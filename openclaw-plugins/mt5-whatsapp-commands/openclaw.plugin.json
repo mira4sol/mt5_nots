@@ -1,0 +1,29 @@
+{
+  "id": "mt5-whatsapp-commands",
+  "name": "MT5 WhatsApp Commands",
+  "description": "Forward WhatsApp group slash commands to mt5_trigger",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "webhookUrl": {
+        "type": "string",
+        "description": "mt5_trigger inbound webhook URL"
+      },
+      "groupJids": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Allowed WhatsApp group JIDs"
+      },
+      "apiToken": {
+        "type": "string",
+        "description": "Optional X-API-Token for the webhook"
+      }
+    }
+  }
+}

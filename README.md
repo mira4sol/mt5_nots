@@ -231,8 +231,9 @@ WhatsApp slash commands (`/positions`, `/tpd`, `/help`, etc.) and manual HTTP tr
 Enable live group commands:
 
 ```bash
-make install-openclaw-hook   # wires OpenClaw → mt5_trigger webhook
-openclaw gateway           # restart gateway to load hook
+make install-openclaw-hook   # wires OpenClaw plugin → mt5_trigger webhook
+openclaw gateway restart     # restart gateway to load plugin
+make diagnose-whatsapp       # verify pluginHooks + webhook
 ```
 
 ---

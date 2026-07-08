@@ -1,0 +1,13 @@
+{
+  "name": "@mt5-trigger/openclaw-whatsapp-commands",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Forward WhatsApp slash commands from OpenClaw to mt5_trigger",
+  "peerDependencies": {
+    "openclaw": ">=2026.3.24"
+  },
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  }
+}
