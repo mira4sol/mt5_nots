@@ -57,6 +57,7 @@ const MT5_COMMANDS = [
   { name: "tpd", description: "Today's closed P/L" },
   { name: "sld", description: "Stop-loss distance on open trades" },
   { name: "cts", description: "Current trade status" },
+  { name: "chart", description: "Live XAUUSD M5 chart (image)" },
 ] as const;
 
 function resolveCommandSender(ctx: PluginCommandContext): string {
@@ -115,7 +116,11 @@ export default definePluginEntry({
 
       try {
         log(`command /${command} sender=${sender} group=${groupJid} account=${account}`);
-        const message = await fetchMt5Command(config, command, account);
+        const sendImage = command === "chart";
+        const message = await fetchMt5Command(config, command, account, { send: sendImage });
+        if (sendImage) {
+          return { text: "📈 Live chart sent." };
+        }
         return { text: message };
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);

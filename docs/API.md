@@ -31,6 +31,7 @@ Commands are scoped **per WhatsApp group**. Each account's `whatsapp_target` in 
 | `/tpd` | Today's closed trade profit/loss (NY day) |
 | `/sld` | Stop-loss distance on open trades |
 | `/cts` | Current trade status with floating P/L |
+| `/chart` | Live XAUUSD M5 chart (sends image to WhatsApp) |
 
 ## Endpoints
 
@@ -89,9 +90,11 @@ curl -H "X-API-Token: YOUR_TOKEN" \
 GET /api/commands/{command}?account={name}&send={true|false}&target={jid}
 ```
 
-Commands: `guide`, `help` (alias), `positions`, `orders`, `nt`, `close_price` (alias), `tpd`, `sld`, `cts`
+Commands: `guide`, `help` (alias), `positions`, `orders`, `nt`, `close_price` (alias), `tpd`, `sld`, `cts`, `chart`
 
 `send` defaults to **`true`** (delivers to the account's `whatsapp_target` group). Use `send=false` to preview the message in JSON only.
+
+**`/chart`:** Renders a live XAUUSD M5 candlestick chart from MT5 and sends a **WhatsApp image** (not plain text). With `send=false`, the API returns a preview caption only — no image is generated or delivered. Requires chart dependencies (`make install-charts`).
 
 Examples:
 
@@ -116,9 +119,15 @@ curl "http://204.168.148.205:8080/api/commands/cts"
 
 # Guide text
 curl "http://204.168.148.205:8080/api/commands/guide"
+
+# Live XAUUSD chart → sends image to WhatsApp
+curl "http://204.168.148.205:8080/api/commands/chart?account=valetax_main"
+
+# Chart preview only (caption JSON, no image send)
+curl "http://204.168.148.205:8080/api/commands/chart?account=valetax_main&send=false"
 ```
 
-Response:
+Response (text commands):
 
 ```json
 {
@@ -126,6 +135,28 @@ Response:
   "account": "valetax_main",
   "message": "Open positions (1):\n#12345 EURUSD BUY vol=0.1 open=1.08500 P/L=$12.50",
   "sent": true
+}
+```
+
+Response (`/chart` with `send=true` — image delivered via OpenClaw; `message` is the image caption):
+
+```json
+{
+  "command": "chart",
+  "account": "valetax_main",
+  "message": "📈 Live chart · XAUUSD.vx M5\nPending 2 · Open 1\nBid 4120.50 · Ask 4120.70",
+  "sent": true
+}
+```
+
+Response (`/chart` with `send=false` — preview only):
+
+```json
+{
+  "command": "chart",
+  "account": "valetax_main",
+  "message": "Live XAUUSD M5 chart (preview only; send=true delivers image).",
+  "sent": false
 }
 ```
 
@@ -142,6 +173,9 @@ Same behavior as GET. Useful for automation tools that prefer POST.
 ```bash
 curl -X POST \
   "http://204.168.148.205:8080/api/commands/positions?account=valetax_main"
+
+curl -X POST \
+  "http://204.168.148.205:8080/api/commands/chart?account=valetax_main"
 ```
 
 ---
@@ -157,6 +191,11 @@ Content-Type: application/json
 curl -X POST \
   -H "Content-Type: application/json" \
   -d '{"command":"/orders","account":"valetax_main"}' \
+  http://204.168.148.205:8080/api/commands/run
+
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"command":"/chart","account":"valetax_main","send":true}' \
   http://204.168.148.205:8080/api/commands/run
 ```
 
@@ -255,7 +294,7 @@ webhook fallback for legacy paths only.
 
 enables `channels.whatsapp.pluginHooks.messageReceived`, and configures:
 
-- Native plugin commands: `/guide`, `/positions`, `/orders`, `/nt`, `/tpd`, `/sld`, `/cts`
+- Native plugin commands: `/guide`, `/positions`, `/orders`, `/nt`, `/tpd`, `/sld`, `/cts`, `/chart`
 - Only from configured `whatsapp_target` group JIDs
 
 `make deploy` runs the hook install automatically.
@@ -272,6 +311,7 @@ Then in the group (as an admin in `commands.whatsapp_admins`):
 ```text
 /guide
 /positions
+/chart
 ```
 
 ---
@@ -323,6 +363,34 @@ automatically; merge with your existing config:
 }
 ```
 
+---
+
+## Charts
+
+Live charts use the same pipeline as `make send-chart` and `/chart`:
+
+1. Fetch live M5 candles from MT5 (auto-detects `XAUUSD.vx` / `XAUUSD`)
+2. Overlay nearest pending orders and open position levels
+3. Render PNG and send via OpenClaw `--media`
+
+**Requirements:** `make install-charts` (included in `make setup`)
+
+**CLI (server):**
+
+```bash
+make send-chart
+```
+
+**WhatsApp:** `/chart` in the group (admins only)
+
+**HTTP API:**
+
+```bash
+curl "http://204.168.148.205:8080/api/commands/chart?account=valetax_main"
+```
+
+---
+
 ## Configuration
 
 ### `config/settings.yaml` (global commands — single source of truth)
@@ -368,5 +436,6 @@ accounts:
 | Today P/L | `GET http://204.168.148.205:8080/api/commands/tpd` |
 | SL distance | `GET http://204.168.148.205:8080/api/commands/sld` |
 | Trade status | `GET http://204.168.148.205:8080/api/commands/cts` |
+| Live chart (image) | `GET http://204.168.148.205:8080/api/commands/chart` |
 | Guide | `GET http://204.168.148.205:8080/api/commands/guide` |
 | WhatsApp inbound | `POST http://204.168.148.205:8080/webhooks/whatsapp/inbound` |

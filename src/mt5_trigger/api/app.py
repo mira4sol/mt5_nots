@@ -14,7 +14,7 @@ from mt5_trigger.storage.repository import EventRepository
 from mt5_trigger.runtime import get_uptime
 
 COMMAND_NAMES = frozenset(
-    {"guide", "help", "positions", "orders", "nt", "close_price", "tpd", "sld", "cts"}
+    {"guide", "help", "positions", "orders", "nt", "close_price", "tpd", "sld", "cts", "chart"}
 )
 
 

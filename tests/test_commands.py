@@ -20,6 +20,18 @@ def test_parse_guide_and_help_aliases() -> None:
     assert service.parse_command("/mt5help") == "guide"
 
 
+def test_parse_chart_command() -> None:
+    service = CommandService(_minimal_config())
+    assert service.parse_command("/chart") == "chart"
+
+
+def test_guide_lists_chart_command() -> None:
+    service = CommandService(_minimal_config())
+    account = MagicMock(name="valetax_main")
+    message = service._execute("guide", account)
+    assert "/chart" in message
+
+
 def test_execute_guide_without_mt5() -> None:
     service = CommandService(_minimal_config())
     account = MagicMock(name="valetax_main")

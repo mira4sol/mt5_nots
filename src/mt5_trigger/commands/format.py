@@ -37,6 +37,7 @@ def guide_message() -> str:
         "/tpd — today's closed P/L\n"
         "/sld — stop-loss distance on open trades\n"
         "/cts — current trade status\n"
+        "/chart — live XAUUSD M5 chart\n"
         "/guide — this list"
     )
 

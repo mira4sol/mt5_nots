@@ -36,6 +36,7 @@ COMMAND_ALIASES: dict[str, str] = {
     "tpd": "tpd",
     "sld": "sld",
     "cts": "cts",
+    "chart": "chart",
     "guide": "guide",
     "help": "guide",
     "mt5help": "guide",
@@ -217,7 +218,20 @@ class CommandService:
             )
 
         try:
+            if command == "chart":
+                return self._run_chart_command(
+                    account,
+                    send=send,
+                    target=target or account.whatsapp_target,
+                )
             message = self._execute(command, account)
+        except ImportError as exc:
+            return CommandResult(
+                command=command,
+                account=account.name,
+                message="",
+                error=str(exc),
+            )
         except Exception as exc:
             logger.exception("Command %s failed for %s", command, account.name)
             return CommandResult(
@@ -326,6 +340,48 @@ class CommandService:
             distance = abs(current - pos.sl)
             rows.append((pos, current, distance))
         return cmd_format.sld_message(rows)
+
+    def _run_chart_command(
+        self,
+        account: AccountConfig,
+        *,
+        send: bool,
+        target: str | None,
+    ) -> CommandResult:
+        if not send:
+            return CommandResult(
+                command="chart",
+                account=account.name,
+                message="Live XAUUSD M5 chart (preview only; send=true delivers image).",
+                sent=False,
+            )
+
+        dest = target or account.whatsapp_target
+        if not dest:
+            return CommandResult(
+                command="chart",
+                account=account.name,
+                message="",
+                error="No whatsapp_target configured for account",
+            )
+
+        client = self._get_client(account)
+        charts_dir = self.config.settings.db_path_resolved.parent / "charts"
+        from mt5_trigger.charts.sender import send_live_chart
+
+        result = send_live_chart(
+            client=client,
+            settings=self.config.settings,
+            charts_dir=charts_dir,
+            whatsapp_target=dest,
+            send=True,
+        )
+        return CommandResult(
+            command="chart",
+            account=account.name,
+            message=result.caption,
+            sent=result.sent,
+        )
 
     def _get_client(self, account: AccountConfig) -> MT5Client:
         if account.name not in self._clients:
