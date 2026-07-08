@@ -12,6 +12,7 @@ from mt5_trigger.config import (
     AccountConfig,
     AppConfig,
     _normalize_phone,
+    _phone_digits,
     command_group_jids,
     enabled_accounts,
     resolve_command_account,
@@ -74,8 +75,14 @@ class CommandService:
         admins = self.config.settings.commands.whatsapp_admins
         if not admins:
             return True
-        normalized = _normalize_phone(sender)
-        return normalized in admins or sender in admins
+        sender_digits = _phone_digits(sender)
+        for admin in admins:
+            if sender_digits and sender_digits == _phone_digits(admin):
+                return True
+            normalized = _normalize_phone(sender)
+            if normalized in admins or sender in admins:
+                return True
+        return False
 
     def is_allowed_group(self, group_jid: str) -> bool:
         return resolve_command_account(self.config, group_jid=group_jid) is not None

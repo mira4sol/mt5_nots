@@ -107,6 +107,11 @@ def main() -> int:
     )
     plugin_config = plugin_entry.get("config") or {}
     ok &= _check(
+        "plugin admins",
+        bool(plugin_config.get("admins")),
+        str(plugin_config.get("admins", "")),
+    )
+    ok &= _check(
         "plugin apiBaseUrl",
         bool(str(plugin_config.get("apiBaseUrl", "")).strip()),
         str(plugin_config.get("apiBaseUrl", "")),

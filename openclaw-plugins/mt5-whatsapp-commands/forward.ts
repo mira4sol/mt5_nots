@@ -3,6 +3,7 @@ export type PluginRuntimeConfig = {
   webhookUrl: string;
   groupJids: Set<string>;
   accountsByGroup: Record<string, string>;
+  admins: string[];
   apiToken?: string;
 };
 
@@ -30,6 +31,15 @@ function parseGroupJids(raw: unknown): Set<string> {
     }
   }
   return groupJids;
+}
+
+function parseAdmins(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw
+    .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    .map((entry) => normalizePhone(entry.trim()));
 }
 
 function parseAccountsByGroup(raw: unknown): Record<string, string> {
@@ -69,11 +79,13 @@ export function configFromEnv(): PluginRuntimeConfig | null {
   }
 
   const apiToken = readEnv("COMMAND_API_TOKEN");
+  const admins = parseAdmins(readEnv("WHATSAPP_ADMINS").split(",").filter(Boolean));
   return {
     apiBaseUrl: apiBaseUrl || webhookUrl.replace(/\/webhooks\/whatsapp\/inbound\/?$/, ""),
     webhookUrl: webhookUrl || `${apiBaseUrl}/webhooks/whatsapp/inbound`,
     groupJids,
     accountsByGroup: {},
+    admins,
     apiToken: apiToken || undefined,
   };
 }
@@ -100,6 +112,7 @@ export function configFromPlugin(
 
   const groupJids = parseGroupJids(pluginConfig.groupJids);
   const accountsByGroup = parseAccountsByGroup(pluginConfig.accountsByGroup);
+  const admins = parseAdmins(pluginConfig.admins);
   const apiToken =
     typeof pluginConfig.apiToken === "string"
       ? pluginConfig.apiToken.trim()
@@ -110,6 +123,7 @@ export function configFromPlugin(
     webhookUrl: webhookUrl || `${apiBaseUrl}/webhooks/whatsapp/inbound`,
     groupJids,
     accountsByGroup,
+    admins,
     apiToken: apiToken || undefined,
   };
 }
@@ -185,6 +199,21 @@ export function resolveSender(
 export function isWhatsAppChannel(channelId?: string): boolean {
   const normalized = (channelId ?? "").trim().toLowerCase();
   return normalized === "whatsapp" || normalized === "wa";
+}
+
+export function phoneDigits(sender: string): string {
+  return normalizePhone(sender).replace(/\D/g, "");
+}
+
+export function isAllowedAdmin(sender: string | undefined, admins: string[]): boolean {
+  if (!admins.length) {
+    return true;
+  }
+  if (!sender?.trim()) {
+    return false;
+  }
+  const senderDigits = phoneDigits(sender);
+  return admins.some((admin) => phoneDigits(admin) === senderDigits);
 }
 
 export function isAllowedGroup(groupJid: string, allowed: Set<string>): boolean {
@@ -282,6 +311,10 @@ export async function forwardSlashCommand(
   const sender = resolveSender(message, metadata);
   if (!sender) {
     log?.(`skip slash command without sender in ${groupJid}`);
+    return false;
+  }
+  if (!isAllowedAdmin(sender, config.admins)) {
+    log?.(`skip unauthorized sender ${sender} in ${groupJid}`);
     return false;
   }
 

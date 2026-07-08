@@ -12,7 +12,12 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-from mt5_trigger.config import command_group_jids, enabled_accounts, load_config
+from mt5_trigger.config import (
+    command_group_jids,
+    enabled_accounts,
+    load_config,
+    whatsapp_admin_variants,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SOURCE = PROJECT_ROOT / "openclaw-plugins" / "mt5-whatsapp-commands"
@@ -108,11 +113,10 @@ def _patch_config(
     channels = config.setdefault("channels", {})
     whatsapp = channels.setdefault("whatsapp", {})
     whatsapp["enabled"] = whatsapp.get("enabled", True)
-    if admins:
-        whatsapp.setdefault("groupPolicy", "allowlist")
-        existing_allow = whatsapp.get("groupAllowFrom")
-        if not existing_allow:
-            whatsapp["groupAllowFrom"] = admins
+    allow_variants = whatsapp_admin_variants(admins) if admins else []
+    if allow_variants:
+        whatsapp["groupPolicy"] = "allowlist"
+        whatsapp["groupAllowFrom"] = allow_variants
     plugin_hooks = whatsapp.setdefault("pluginHooks", {})
     plugin_hooks["messageReceived"] = True
 
@@ -142,10 +146,10 @@ def _patch_config(
         "env": hook_env,
     }
 
-    if admins:
+    if allow_variants:
         commands_oc = config.setdefault("commands", {})
         allow_from = commands_oc.setdefault("allowFrom", {})
-        allow_from["whatsapp"] = admins
+        allow_from["whatsapp"] = allow_variants
 
     _save_json(config_path, config)
 
@@ -190,17 +194,20 @@ def main() -> int:
     webhook_url = _webhook_url(config)
     api_base = _api_base_url(config)
     admins = config.settings.commands.whatsapp_admins
+    allow_variants = whatsapp_admin_variants(admins)
     accounts_by_group = _accounts_by_group(accounts, group_jids)
     hook_env = {
         "WHATSAPP_GROUP_JIDS": ",".join(group_jids),
         "MT5_TRIGGER_WEBHOOK_URL": webhook_url,
         "MT5_TRIGGER_API_URL": api_base,
+        "WHATSAPP_ADMINS": ",".join(admins),
     }
     plugin_config: dict[str, object] = {
         "apiBaseUrl": api_base,
         "webhookUrl": webhook_url,
         "groupJids": group_jids,
         "accountsByGroup": accounts_by_group,
+        "admins": admins,
     }
     token = config.settings.commands.api_token.strip()
     if token:
@@ -238,7 +245,8 @@ def main() -> int:
     print(f"  webhook    : {webhook_url}")
     print("  whatsapp   : pluginHooks.messageReceived = true")
     if admins:
-        print(f"  admins     : {', '.join(admins)}")
+        print(f"  admins     : {', '.join(admins)} (from config/settings.yaml)")
+        print(f"  allowlist  : {', '.join(allow_variants)}")
     if restart is not None and restart.returncode == 0:
         print("  gateway    : restarted")
     elif enable_hook is None or enable_plugin is None:

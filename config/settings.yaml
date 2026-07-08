@@ -16,7 +16,8 @@ openclaw:
 
 commands:
   enabled: true
-  # E.164 numbers allowed to run /positions, /help, etc. (all configured groups)
+  # SINGLE SOURCE OF TRUTH for who can run /positions, /help, etc.
+  # make install-openclaw-hook syncs this list into OpenClaw + the plugin.
   whatsapp_admins:
     - "+2349050273391"
   cooldown_seconds: 30

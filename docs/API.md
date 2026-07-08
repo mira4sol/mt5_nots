@@ -328,15 +328,17 @@ automatically; merge with your existing config:
 
 ## Configuration
 
-### `config/settings.yaml` (global commands)
+### `config/settings.yaml` (global commands — single source of truth)
 
 ```yaml
 commands:
   enabled: true
-  whatsapp_admins:
-    - "+15551234567"
+  whatsapp_admins:        # ONLY edit admins here
+    - "+2349050273391"
   cooldown_seconds: 30
 ```
+
+After changing admins, run `make install-openclaw-hook && openclaw gateway restart` to sync into OpenClaw.
 
 ### `config/accounts.yaml` (per investor group)
 

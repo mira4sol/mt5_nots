@@ -5,7 +5,9 @@ import {
   fetchMt5Command,
   forwardSlashCommand,
   groupFromSessionKey,
+  isAllowedAdmin,
   isAllowedGroup,
+  normalizePhone,
   resolveConfig,
   resolveGroupJid,
   type InboundMessage,
@@ -63,7 +65,13 @@ const MT5_COMMANDS = [
   { name: "tpd", description: "Today's closed P/L" },
   { name: "sld", description: "Stop-loss distance on open trades" },
   { name: "cts", description: "Current trade status" },
+  { name: "help", description: "List MT5 Trigger commands" },
 ] as const;
+
+function resolveCommandSender(ctx: PluginCommandContext): string {
+  const raw = ctx.senderId ?? ctx.from ?? "";
+  return normalizePhone(raw);
+}
 
 function resolveCommandGroup(ctx: PluginCommandContext): string {
   const to = (ctx.to ?? "").trim();
@@ -81,18 +89,6 @@ function resolveCommandGroup(ctx: PluginCommandContext): string {
   });
 }
 
-function helpText(): string {
-  return (
-    "MT5 Trigger commands:\n" +
-    "/positions — open positions\n" +
-    "/close_price — nearest pending trigger price\n" +
-    "/tpd — today's closed P/L\n" +
-    "/sld — stop-loss distance on open trades\n" +
-    "/cts — current trade status\n" +
-    "/mt5help — this list"
-  );
-}
-
 export default definePluginEntry({
   id: "mt5-whatsapp-commands",
   name: "MT5 WhatsApp Commands",
@@ -108,6 +104,12 @@ export default definePluginEntry({
         return { text: "MT5 plugin not configured. Run: make install-openclaw-hook" };
       }
 
+      const sender = resolveCommandSender(ctx);
+      if (!isAllowedAdmin(sender, config.admins)) {
+        log(`denied /${command} sender=${sender || "(unknown)"}`);
+        return { text: "You are not authorized to run MT5 commands." };
+      }
+
       const groupJid = resolveCommandGroup(ctx);
       if (!isAllowedGroup(groupJid, config.groupJids)) {
         return { text: `Commands are not enabled for this group (${groupJid || "unknown"}).` };
@@ -119,7 +121,7 @@ export default definePluginEntry({
       }
 
       try {
-        log(`command /${command} group=${groupJid} account=${account}`);
+        log(`command /${command} sender=${sender} group=${groupJid} account=${account}`);
         const message = await fetchMt5Command(config, command, account);
         return { text: message };
       } catch (error) {
@@ -133,7 +135,7 @@ export default definePluginEntry({
       api.registerCommand({
         name: command.name,
         description: command.description,
-        requireAuth: true,
+        requireAuth: false,
         handler: async (ctx: PluginCommandContext) =>
           runRegisteredCommand(command.name, ctx),
       });
@@ -141,9 +143,9 @@ export default definePluginEntry({
 
     api.registerCommand({
       name: "mt5help",
-      description: "List MT5 Trigger commands",
-      requireAuth: true,
-      handler: async () => ({ text: helpText() }),
+      description: "List MT5 Trigger commands (alias)",
+      requireAuth: false,
+      handler: async (ctx: PluginCommandContext) => runRegisteredCommand("help", ctx),
     });
 
     api.on("message_received", async (event: MessageReceivedEvent, ctx: MessageReceivedContext) => {

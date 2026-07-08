@@ -30,6 +30,24 @@ def _normalize_phone(number: str) -> str:
     return number
 
 
+def _phone_digits(number: str) -> str:
+    return re.sub(r"\D", "", _normalize_phone(number))
+
+
+def whatsapp_admin_variants(admins: list[str]) -> list[str]:
+    """Expand admin numbers for OpenClaw allowlists (E.164 + digits-only)."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for admin in admins:
+        normalized = _normalize_phone(admin)
+        digits = _phone_digits(admin)
+        for variant in (normalized, f"+{digits}", digits):
+            if variant and variant not in seen:
+                seen.add(variant)
+                out.append(variant)
+    return out
+
+
 class NearTriggerSettings(BaseModel):
     min_pips: float = 12
     spread_multiplier: float = 3

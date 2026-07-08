@@ -31,6 +31,13 @@
         },
         "description": "Map group JID to mt5_trigger account name"
       },
+      "admins": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "WhatsApp admins (synced from config/settings.yaml)"
+      },
       "apiToken": {
         "type": "string",
         "description": "Optional X-API-Token for mt5_trigger HTTP"
