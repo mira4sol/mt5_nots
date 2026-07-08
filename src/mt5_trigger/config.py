@@ -30,11 +30,21 @@ class OpenClawSettings(BaseModel):
 class AppSettings(BaseModel):
     poll_interval_seconds: float = 2
     health_host: str = "0.0.0.0"
-    health_port: int = 8080
+    health_port: int = 8080  # override via HEALTH_PORT in .env
     openclaw_bin: str = "openclaw"
     db_path: str = "data/mt5_trigger.db"
     near_trigger: NearTriggerSettings = Field(default_factory=NearTriggerSettings)
     openclaw: OpenClawSettings = Field(default_factory=OpenClawSettings)
+
+    @field_validator("health_port", mode="before")
+    @classmethod
+    def parse_health_port(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v = strip_env_value(v)
+            if not v:
+                return 8080
+            return int(v)
+        return v
 
     @property
     def db_path_resolved(self) -> Path:
@@ -152,10 +162,25 @@ def load_config(
     accounts_data = _load_yaml(accounts_path or DEFAULT_ACCOUNTS_PATH)
 
     settings = AppSettings.model_validate(settings_data)
+    settings = apply_env_to_settings(settings)
     accounts = [
         AccountConfig.model_validate(a) for a in accounts_data.get("accounts", [])
     ]
     return AppConfig(settings=settings, accounts=accounts)
+
+
+def apply_env_to_settings(settings: AppSettings) -> AppSettings:
+    """Overlay HEALTH_* from .env onto app settings (.env wins over settings.yaml)."""
+    updates: dict[str, Any] = {}
+    port = strip_env_value(os.environ.get("HEALTH_PORT", ""))
+    if port:
+        updates["health_port"] = int(port)
+    host = strip_env_value(os.environ.get("HEALTH_HOST", ""))
+    if host:
+        updates["health_host"] = host
+    if updates:
+        return settings.model_copy(update=updates)
+    return settings
 
 
 def apply_env_to_account(account: AccountConfig) -> AccountConfig:

@@ -14,6 +14,8 @@ ifneq (,$(wildcard .env))
   include .env
   export
 endif
+HEALTH_PORT ?= 8080
+HEALTH_HOST ?= 127.0.0.1
 
 help:
 	@echo "MT5 Trigger Monitor"
@@ -100,8 +102,8 @@ prod run:
 	$(PYTHON) -m mt5_trigger
 
 health:
-	@curl -sf http://localhost:8080/health | python3 -m json.tool || \
-		(echo "Health endpoint not reachable. Is the server running? (make prod)" && exit 1)
+	@curl -sf http://$(HEALTH_HOST):$(HEALTH_PORT)/health | python3 -m json.tool || \
+		(echo "Health endpoint not reachable at http://$(HEALTH_HOST):$(HEALTH_PORT)/health (make prod?)" && exit 1)
 
 # --- Deploy (VPS) ---
 

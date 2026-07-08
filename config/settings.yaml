@@ -1,6 +1,6 @@
 poll_interval_seconds: 2
-health_host: '0.0.0.0'
-health_port: 8080
+health_host: "0.0.0.0"
+health_port: 8080  # override with HEALTH_PORT in .env
 openclaw_bin: 'openclaw'
 db_path: 'data/mt5_trigger.db'
 
