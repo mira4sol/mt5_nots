@@ -68,11 +68,32 @@ class AccountConfig(BaseModel):
             return "auto"
         return v
 
+    @field_validator("login", "password", "server", "whatsapp_target", "bridge_host", mode="before")
+    @classmethod
+    def strip_strings(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return strip_env_value(v)
+        return v
+
     @field_validator("terminal_path", mode="before")
     @classmethod
     def blank_terminal_path(cls, v: Any) -> str | None:
         if v == "" or v is None:
             return None
+        if isinstance(v, str):
+            v = strip_env_value(v)
+        if not v:
+            return None
+        return v
+
+    @field_validator("bridge_port", mode="before")
+    @classmethod
+    def parse_bridge_port(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v = strip_env_value(v)
+            if not v:
+                return 18813
+            return int(v)
         return v
 
 
@@ -84,14 +105,25 @@ class AppConfig(BaseModel):
 _ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
 
 
+def strip_env_value(value: str) -> str:
+    """Remove surrounding quotes/whitespace from .env values (Make/dotenv safe)."""
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        value = value[1:-1]
+    return value.strip()
+
+
 def _interpolate_env(value: Any) -> Any:
     if isinstance(value, str):
 
         def repl(match: re.Match[str]) -> str:
             key = match.group(1)
-            return os.environ.get(key, "")
+            raw = os.environ.get(key, "")
+            return strip_env_value(raw) if raw else ""
 
-        return _ENV_PATTERN.sub(repl, value)
+        result = _ENV_PATTERN.sub(repl, value)
+        # Literal strings without ${} — leave as-is
+        return result
     if isinstance(value, dict):
         return {k: _interpolate_env(v) for k, v in value.items()}
     if isinstance(value, list):
@@ -113,7 +145,8 @@ def load_config(
     env_path: Path | None = None,
 ) -> AppConfig:
     env_file = env_path or PROJECT_ROOT / ".env"
-    load_dotenv(env_file, override=False)
+    # override=True so .env file wins over Make-exported quoted values
+    load_dotenv(env_file, override=True)
 
     settings_data = _load_yaml(settings_path or DEFAULT_SETTINGS_PATH)
     accounts_data = _load_yaml(accounts_path or DEFAULT_ACCOUNTS_PATH)
@@ -125,8 +158,39 @@ def load_config(
     return AppConfig(settings=settings, accounts=accounts)
 
 
+def apply_env_to_account(account: AccountConfig) -> AccountConfig:
+    """Overlay MT5_* environment variables onto an account (same as test script)."""
+    updates: dict[str, Any] = {}
+    backend = strip_env_value(os.environ.get("MT5_BACKEND", ""))
+    if backend:
+        if backend in _BACKEND_ALIASES:
+            mapped, client = _BACKEND_ALIASES[backend]
+            updates["mt5_backend"] = mapped
+            if not strip_env_value(os.environ.get("MT5_BRIDGE_CLIENT", "")):
+                updates["bridge_client"] = client
+        else:
+            updates["mt5_backend"] = backend
+    for env_key, field in (
+        ("MT5_BRIDGE_HOST", "bridge_host"),
+        ("MT5_BRIDGE_CLIENT", "bridge_client"),
+        ("MT5_LOGIN", "login"),
+        ("MT5_PASSWORD", "password"),
+        ("MT5_SERVER", "server"),
+        ("MT5_TERMINAL_PATH", "terminal_path"),
+    ):
+        val = strip_env_value(os.environ.get(env_key, ""))
+        if val:
+            updates[field] = val
+    port = strip_env_value(os.environ.get("MT5_BRIDGE_PORT", ""))
+    if port:
+        updates["bridge_port"] = int(port)
+    if updates:
+        account = account.model_copy(update=updates)
+    return normalize_account_config(account)
+
+
 def enabled_accounts(config: AppConfig) -> list[AccountConfig]:
-    return [normalize_account_config(a) for a in config.accounts if a.enabled]
+    return [apply_env_to_account(a) for a in config.accounts if a.enabled]
 
 
 # Aliases users often put in MT5_BACKEND by mistake

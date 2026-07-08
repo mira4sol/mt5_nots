@@ -8,38 +8,16 @@ import os
 import sys
 
 from mt5_trigger.config import (
-    _BACKEND_ALIASES,
+    apply_env_to_account,
     enabled_accounts,
     load_config,
-    normalize_account_config,
 )
 from mt5_trigger.mt5.backend import _port_open, resolve_backend, resolve_bridge_client
 from mt5_trigger.mt5.client import MT5Client
 
 
 def _apply_env_overrides(account):
-    """Apply MT5_* env vars from .env over account config."""
-    updates: dict = {}
-    if os.environ.get("MT5_BACKEND"):
-        backend = os.environ["MT5_BACKEND"]
-        if backend in _BACKEND_ALIASES:
-            mapped, client = _BACKEND_ALIASES[backend]
-            updates["mt5_backend"] = mapped
-            if not os.environ.get("MT5_BRIDGE_CLIENT"):
-                updates["bridge_client"] = client
-        else:
-            updates["mt5_backend"] = backend
-    if os.environ.get("MT5_BRIDGE_HOST"):
-        updates["bridge_host"] = os.environ["MT5_BRIDGE_HOST"]
-    if os.environ.get("MT5_BRIDGE_PORT"):
-        updates["bridge_port"] = int(os.environ["MT5_BRIDGE_PORT"])
-    if os.environ.get("MT5_BRIDGE_CLIENT"):
-        updates["bridge_client"] = os.environ["MT5_BRIDGE_CLIENT"]
-    if os.environ.get("MT5_TERMINAL_PATH"):
-        updates["terminal_path"] = os.environ["MT5_TERMINAL_PATH"]
-    if updates:
-        account = account.model_copy(update=updates)
-    return normalize_account_config(account)
+    return apply_env_to_account(account)
 
 
 def _print_positions(client: MT5Client) -> None:
@@ -106,8 +84,6 @@ def main() -> int:
             print(f"ERROR: Account '{args.account}' not found. Available: {names}", file=sys.stderr)
             return 1
         account = matches[0]
-
-    account = _apply_env_overrides(account)
 
     if args.backend:
         account = account.model_copy(update={"mt5_backend": args.backend})
