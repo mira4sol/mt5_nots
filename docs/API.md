@@ -6,6 +6,8 @@ Base URL (deployed server):
 
 All command endpoints **send to WhatsApp by default** (`send=true`). Pass `send=false` to return JSON only without delivering to the group.
 
+The OpenClaw plugin uses `send=false` because it posts the API response as the command reply in chat (avoids duplicate messages).
+
 ## Authentication
 
 API token auth is **disabled** for now — `/api/commands` and `/webhooks/whatsapp/inbound` accept requests without a token.

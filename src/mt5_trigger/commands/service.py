@@ -41,7 +41,7 @@ COMMAND_ALIASES: dict[str, str] = {
     "mt5help": "guide",
 }
 
-COMMAND_PATTERN = re.compile(r"^/([a-z_-]+)\b", re.IGNORECASE)
+COMMAND_PATTERN = re.compile(r"^/([a-z0-9_-]+)\b", re.IGNORECASE)
 
 
 @dataclass
@@ -60,7 +60,14 @@ class CommandService:
         self._clients: dict[str, MT5Client] = {}
 
     def list_commands(self) -> list[str]:
-        return ["/" + name for name in COMMAND_ALIASES.values()]
+        seen: set[str] = set()
+        names: list[str] = []
+        for name in COMMAND_ALIASES.values():
+            if name in seen:
+                continue
+            seen.add(name)
+            names.append("/" + name)
+        return names
 
     def list_command_groups(self) -> list[str]:
         return command_group_jids(enabled_accounts(self.config))
@@ -247,7 +254,7 @@ class CommandService:
         )
 
     def _execute(self, command: str, account: AccountConfig) -> str:
-        if command == "guide":
+        if command in {"guide", "help"}:
             return cmd_format.guide_message()
         client = self._get_client(account)
         if command == "positions":

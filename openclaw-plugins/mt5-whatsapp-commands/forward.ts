@@ -279,7 +279,11 @@ export async function fetchMt5Command(
   command: string,
   account: string,
 ): Promise<string> {
-  const url = `${config.apiBaseUrl}/api/commands/${command}?account=${encodeURIComponent(account)}`;
+  // OpenClaw displays the returned command text in chat; send=false avoids a
+  // duplicate WhatsApp delivery from mt5_trigger's OpenClaw notifier.
+  const url =
+    `${config.apiBaseUrl}/api/commands/${command}` +
+    `?account=${encodeURIComponent(account)}&send=false`;
   const response = await fetch(url, { headers: authHeaders(config) });
   const body = (await response.json()) as {
     message?: string;

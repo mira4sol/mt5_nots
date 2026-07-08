@@ -35,7 +35,7 @@ help:
 	@echo "  make test-mt5              Connect to MT5 and list open positions"
 	@echo "  make test-mt5-mock         MT5 test using mock backend (no terminal)"
 	@echo "  make test-openclaw-hook    Install hook to data/test-openclaw (isolated)"
-	@echo "  make test-whatsapp-inbound POST /help to webhook (requires make prod)"
+	@echo "  make test-whatsapp-inbound POST /guide to webhook (requires make prod)"
 	@echo "  make test-commands         test-openclaw-hook + test-whatsapp-inbound"
 	@echo ""
 	@echo "Run:"
@@ -112,7 +112,7 @@ test-openclaw-hook:
 	@echo "OpenClaw hook install test OK ($(TEST_OPENCLAW_HOME))"
 
 test-whatsapp-inbound:
-	@echo "Posting /help to local webhook (requires: make prod)..."
+	@echo "Posting /guide to local webhook (requires: make prod)..."
 	$(PYTHON) scripts/whatsapp_inbound_hook.py
 
 test-commands: test-openclaw-hook test-whatsapp-inbound

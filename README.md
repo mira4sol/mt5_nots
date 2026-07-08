@@ -226,7 +226,7 @@ make health
 # or open http://localhost:8080/health
 ```
 
-WhatsApp slash commands (`/positions`, `/tpd`, `/help`, etc.) and manual HTTP triggers are documented in **[docs/API.md](docs/API.md)** (deployed base URL: `http://204.168.148.205:8080/`).
+WhatsApp slash commands (`/positions`, `/tpd`, `/guide`, etc.) and manual HTTP triggers are documented in **[docs/API.md](docs/API.md)** (deployed base URL: `http://204.168.148.205:8080/`).
 
 Enable live group commands:
 

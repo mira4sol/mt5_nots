@@ -9,7 +9,10 @@ ORDER_SEPARATOR = "────────────────"
 
 def guide_message() -> str:
     return (
-        "MT5 Trigger commands:\n"
+        "MT5 Trigger — query your trading account from this group.\n"
+        "Use /guide anytime for this list.\n"
+        "\n"
+        "Commands:\n"
         "/positions — open positions\n"
         "/orders — all pending orders\n"
         "/nt — nearest pending trigger price\n"
