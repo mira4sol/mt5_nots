@@ -309,25 +309,18 @@ class AccountWatcher:
         if not grouped:
             return
 
+        tracked_by_ticket = {
+            row["ticket"]: row
+            for row in self.repo.get_tracked_positions(self.account.name)
+        }
         for position_id, deals in grouped.items():
             if self.repo.event_exists(self.account.name, "closed", position_id):
                 continue
 
-            tracked_rows = self.repo.get_tracked_positions(self.account.name)
-            tracked = next(
-                (row for row in tracked_rows if row["ticket"] == position_id),
-                None,
-            )
+            tracked = tracked_by_ticket.get(position_id)
             if tracked is None:
-                tracked = {
-                    "ticket": position_id,
-                    "symbol": deals[0].symbol,
-                    "open_price": deals[0].price,
-                    "position_type": 0,
-                    "volume": 0.0,
-                    "sl": 0.0,
-                    "tp": 0.0,
-                }
+                continue
+
             self._notify_closed_position(tracked, deals, trade_alerts=True)
 
     def _notify_closed_position(
@@ -361,38 +354,29 @@ class AccountWatcher:
             tp=float(tracked.get("tp") or 0.0),
         )
 
+        recorded = self.repo.record_event(
+            self.account.name,
+            "closed",
+            msg,
+            ticket=ticket,
+            symbol=tracked["symbol"],
+            open_price=float(tracked["open_price"]),
+            close_price=close_deal.price,
+            profit=net,
+        )
+        self.repo.remove_tracked_position(self.account.name, ticket)
+        if not recorded:
+            return
+
         if not trade_alerts:
-            self.repo.record_event(
-                self.account.name,
-                "closed",
-                msg,
-                ticket=ticket,
-                symbol=tracked["symbol"],
-                open_price=float(tracked["open_price"]),
-                close_price=close_deal.price,
-                profit=net,
-            )
-            self.repo.remove_tracked_position(self.account.name, ticket)
             logger.info(
                 "Recorded close for %s without alert (market closed; stats only)",
                 ticket,
             )
             return
 
-        def on_success() -> None:
-            self.repo.record_event(
-                self.account.name,
-                "closed",
-                msg,
-                ticket=ticket,
-                symbol=tracked["symbol"],
-                open_price=float(tracked["open_price"]),
-                close_price=close_deal.price,
-                profit=net,
-            )
-            self.repo.remove_tracked_position(self.account.name, ticket)
-
-        self.notifier.send(msg, on_success=on_success)
+        self.notifier.send(msg)
+        logger.info("Close alert queued for position %s %s", ticket, tracked["symbol"])
 
     def _check_weekly_summary(self, market) -> None:
         now_et = market.now_et
