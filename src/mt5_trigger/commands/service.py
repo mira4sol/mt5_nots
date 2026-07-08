@@ -260,7 +260,10 @@ class CommandService:
         if command == "positions":
             return cmd_format.positions_message(client.get_positions())
         if command == "orders":
-            return cmd_format.orders_message(client.get_pending_orders())
+            orders = client.get_pending_orders()
+            symbol = cmd_format.primary_symbol([o.symbol for o in orders])
+            tick = client.get_tick(symbol) if symbol else None
+            return cmd_format.orders_message(orders, symbol=symbol, tick=tick)
         if command == "nt":
             return self._nearest_trigger(client)
         if command == "tpd":
@@ -268,7 +271,10 @@ class CommandService:
         if command == "sld":
             return self._sld(client)
         if command == "cts":
-            return cmd_format.cts_message(client.get_positions())
+            positions = client.get_positions()
+            symbols = {p.symbol for p in positions}
+            ticks = {s: client.get_tick(s) for s in symbols}
+            return cmd_format.cts_message(positions, ticks=ticks)
         raise ValueError(f"Unknown command: {command}")
 
     def _nearest_trigger(self, client: MT5Client) -> str:

@@ -20,5 +20,5 @@ commands:
   # make install-openclaw-hook syncs this list into OpenClaw + the plugin.
   whatsapp_admins:
     - '+2349050273391'
-  cooldown_seconds: 10
+  cooldown_seconds: 1
   # api_token disabled temporarily — /api/commands and webhook are open

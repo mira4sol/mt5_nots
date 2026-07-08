@@ -1,10 +1,28 @@
 from __future__ import annotations
 
 from mt5_trigger.messages import format_money, format_price
-from mt5_trigger.mt5.client import OpenPosition, PendingOrder
+from mt5_trigger.mt5.client import OpenPosition, PendingOrder, SymbolTick
 
 
 ORDER_SEPARATOR = "────────────────"
+
+
+def symbol_price_line(symbol: str, tick: SymbolTick | None) -> str:
+    if tick is None:
+        return f"{symbol}: price unavailable"
+    return f"{symbol}: bid {format_price(tick.bid)} · ask {format_price(tick.ask)}"
+
+
+def _position_mark_price(position: OpenPosition, tick: SymbolTick | None) -> float | None:
+    if tick is None:
+        return None
+    return tick.bid if position.position_type == 1 else tick.ask
+
+
+def primary_symbol(symbols: list[str]) -> str | None:
+    if not symbols:
+        return None
+    return max(set(symbols), key=symbols.count)
 
 
 def guide_message() -> str:
@@ -41,10 +59,20 @@ def positions_message(positions: list[OpenPosition]) -> str:
     return "\n".join(lines)
 
 
-def orders_message(orders: list[PendingOrder]) -> str:
+def orders_message(
+    orders: list[PendingOrder],
+    *,
+    symbol: str | None = None,
+    tick: SymbolTick | None = None,
+) -> str:
     if not orders:
         return "No pending orders."
-    lines = [f"Pending orders ({len(orders)}):"]
+    lines: list[str] = []
+    header_symbol = symbol or primary_symbol([o.symbol for o in orders])
+    if header_symbol:
+        lines.append(symbol_price_line(header_symbol, tick))
+        lines.append("")
+    lines.append(f"Pending orders ({len(orders)}):")
     for o in orders:
         sl = format_price(o.sl) if o.sl > 0 else "none"
         tp = format_price(o.tp) if o.tp > 0 else "none"
@@ -113,17 +141,33 @@ def sld_message(rows: list[tuple[OpenPosition, float | None, float | None]]) -> 
     return "\n".join(lines)
 
 
-def cts_message(positions: list[OpenPosition]) -> str:
+def cts_message(
+    positions: list[OpenPosition],
+    *,
+    ticks: dict[str, SymbolTick | None] | None = None,
+) -> str:
     if not positions:
         return "No active trades."
+    ticks = ticks or {}
     total_pl = sum(p.profit for p in positions)
-    lines = [f"Active trades ({len(positions)}) — floating P/L {format_money(total_pl)}:"]
+    lines: list[str] = []
+    seen: set[str] = set()
+    for p in positions:
+        if p.symbol in seen:
+            continue
+        seen.add(p.symbol)
+        lines.append(symbol_price_line(p.symbol, ticks.get(p.symbol)))
+    if lines:
+        lines.append("")
+    lines.append(f"Active trades ({len(positions)}) — floating P/L {format_money(total_pl)}:")
     for p in positions:
         side = "BUY" if p.position_type == 0 else "SELL"
         sl = format_price(p.sl) if p.sl > 0 else "none"
         tp = format_price(p.tp) if p.tp > 0 else "none"
+        current = _position_mark_price(p, ticks.get(p.symbol))
+        now_part = f" now={format_price(current)}" if current is not None else ""
         lines.append(
-            f"#{p.ticket} {p.symbol} {side} open={format_price(p.price_open)} "
-            f"P/L={format_money(p.profit)} SL={sl} TP={tp}"
+            f"#{p.ticket} {p.symbol} {side} open={format_price(p.price_open)}"
+            f"{now_part} P/L={format_money(p.profit)} SL={sl} TP={tp}"
         )
     return "\n".join(lines)

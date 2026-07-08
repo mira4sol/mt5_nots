@@ -51,3 +51,51 @@ def test_fetch_mt5_command_uses_send_false() -> None:
     ).read_text(encoding="utf-8")
     assert "send=false" in forward_ts
     assert "fetchMt5Command" in forward_ts
+
+
+def test_orders_message_includes_symbol_price() -> None:
+    from mt5_trigger.commands import format as cmd_format
+    from mt5_trigger.mt5.client import PendingOrder, SymbolTick
+
+    orders = [
+        PendingOrder(
+            ticket=1,
+            symbol="XAUUSD.vx",
+            order_type=5,
+            order_type_label="SELL STOP",
+            price_open=2650.0,
+            volume=0.01,
+            sl=0.0,
+            tp=0.0,
+            time_setup=0,
+        )
+    ]
+    tick = SymbolTick(bid=2649.5, ask=2649.7, spread_points=20.0)
+    message = cmd_format.orders_message(orders, symbol="XAUUSD.vx", tick=tick)
+    assert message.startswith("XAUUSD.vx: bid 2649.50000 · ask 2649.70000")
+    assert "Pending orders (1):" in message
+
+
+def test_cts_message_includes_symbol_price() -> None:
+    from mt5_trigger.commands import format as cmd_format
+    from mt5_trigger.mt5.client import OpenPosition, SymbolTick
+
+    positions = [
+        OpenPosition(
+            ticket=10,
+            symbol="XAUUSD.vx",
+            position_type=0,
+            price_open=2640.0,
+            volume=0.01,
+            sl=2630.0,
+            tp=2660.0,
+            profit=12.5,
+            time=0,
+            comment="",
+        )
+    ]
+    tick = SymbolTick(bid=2650.0, ask=2650.2, spread_points=20.0)
+    message = cmd_format.cts_message(positions, ticks={"XAUUSD.vx": tick})
+    assert "XAUUSD.vx: bid 2650.00000 · ask 2650.20000" in message
+    assert "now=2650.20000" in message
+

@@ -55,8 +55,13 @@ class MockMT5:
     def symbol_info(self, symbol: str) -> SymbolInfo:
         return SymbolInfo(point=0.00001, trade_mode=4)
 
-    def history_select(self, date_from: Any, date_to: Any) -> None:
-        pass
-
-    def history_deals_get(self, position: int | None = None) -> list[Deal]:
+    def history_deals_get(
+        self,
+        date_from: Any = None,
+        date_to: Any = None,
+        *,
+        position: int | None = None,
+        ticket: int | None = None,
+        group: str | None = None,
+    ) -> list[Deal]:
         return []

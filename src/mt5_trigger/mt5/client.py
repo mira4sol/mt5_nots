@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Any
 
 from mt5_trigger.config import AccountConfig, normalize_account_config
@@ -222,9 +222,6 @@ class MT5Client:
 
     def get_position_deals(self, position_ticket: int) -> list[ClosedDeal]:
         self._ensure_connected()
-        now = datetime.now(timezone.utc)
-        date_from = now - timedelta(days=30)
-        self._mt5.history_select(date_from, now)
         deals = self._mt5.history_deals_get(position=position_ticket)
         if deals is None:
             return []
@@ -244,16 +241,14 @@ class MT5Client:
 
     def get_weekly_closed_deals(self, week_start: datetime, week_end: datetime) -> list[ClosedDeal]:
         self._ensure_connected()
-        self._mt5.history_select(week_start, week_end)
-        deals = self._mt5.history_deals_get()
+        deals = self._mt5.history_deals_get(week_start, week_end)
         if deals is None:
             return []
         return self._filter_exit_deals(deals)
 
     def get_daily_closed_deals(self, day_start: datetime, day_end: datetime) -> list[ClosedDeal]:
         self._ensure_connected()
-        self._mt5.history_select(day_start, day_end)
-        deals = self._mt5.history_deals_get()
+        deals = self._mt5.history_deals_get(day_start, day_end)
         if deals is None:
             return []
         return self._filter_exit_deals(deals)
