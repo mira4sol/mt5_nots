@@ -5,29 +5,26 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import urllib.error
 import urllib.request
 
-from dotenv import load_dotenv
-
-from mt5_trigger.config import command_group_jids, enabled_accounts, load_config
-
-
-def _defaults_from_config() -> tuple[str, str]:
-    config = load_config()
-    accounts = enabled_accounts(config)
-    groups = command_group_jids(accounts)
-    group_jid = groups[0] if groups else ""
-    admins = config.settings.commands.whatsapp_admins
-    sender = admins[0] if admins else ""
-    return sender, group_jid
+from mt5_trigger.config import (
+    command_group_jids,
+    enabled_accounts,
+    load_config,
+    resolve_command_api_token,
+)
 
 
 def main() -> int:
-    load_dotenv()
-    default_sender, default_group = _defaults_from_config()
+    config = load_config()
+    accounts = enabled_accounts(config)
+    groups = command_group_jids(accounts)
+    default_group = groups[0] if groups else ""
+    admins = config.settings.commands.whatsapp_admins
+    default_sender = admins[0] if admins else ""
+    token = resolve_command_api_token(config)
 
     parser = argparse.ArgumentParser(description="POST WhatsApp inbound payload to mt5_trigger")
     parser.add_argument("--text", default="/help", help="Message body (default: /help)")
@@ -62,15 +59,17 @@ def main() -> int:
         )
         return 1
 
-    port = os.environ.get("HEALTH_PORT", "8080").strip() or "8080"
-    host = os.environ.get("HEALTH_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    host = config.settings.health_host
+    port = config.settings.health_port
     if host == "0.0.0.0":
         host = "127.0.0.1"
     api_url = args.api_url or f"http://{host}:{port}/webhooks/whatsapp/inbound"
-    token = os.environ.get("COMMAND_API_TOKEN", "").strip()
+
     if not token:
-        config = load_config()
-        token = config.settings.commands.api_token.strip()
+        print(
+            "WARN: COMMAND_API_TOKEN is not set in .env — webhook auth is disabled on the server",
+            file=sys.stderr,
+        )
 
     payload = {
         "text": args.text,
@@ -87,6 +86,7 @@ def main() -> int:
     print(f"  group   : {args.group_jid}")
     print(f"  sender  : {args.sender}")
     print(f"  text    : {args.text}")
+    print(f"  token   : {'set' if token else 'MISSING'}")
 
     req = urllib.request.Request(api_url, data=data, headers=headers, method="POST")
     try:
@@ -96,6 +96,13 @@ def main() -> int:
             return 0
     except urllib.error.HTTPError as exc:
         print(exc.read().decode("utf-8"), file=sys.stderr)
+        if exc.code == 401:
+            print(
+                "\nFix: set COMMAND_API_TOKEN in .env (must match the running app), then:\n"
+                "  pm2 restart mt5-trigger\n"
+                "  make test-whatsapp-inbound",
+                file=sys.stderr,
+            )
         return exc.code if exc.code else 1
     except urllib.error.URLError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

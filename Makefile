@@ -110,6 +110,7 @@ test-openclaw-hook:
 
 test-whatsapp-inbound:
 	@echo "Posting /help to local webhook (requires: make prod)..."
+	@$(PYTHON) -c "from mt5_trigger.config import load_config, resolve_command_api_token; t=resolve_command_api_token(load_config()); import sys; sys.exit(0 if t else (print('ERROR: COMMAND_API_TOKEN missing in .env (required by settings.yaml api_token)', file=sys.stderr) or 1))"
 	$(PYTHON) scripts/whatsapp_inbound_hook.py
 
 test-commands: test-openclaw-hook test-whatsapp-inbound

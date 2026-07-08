@@ -108,6 +108,7 @@ def main() -> int:
         "MT5_TRIGGER_WEBHOOK_URL": _webhook_url(config),
     }
     token = config.settings.commands.api_token.strip()
+    
     if token:
         hook_env["COMMAND_API_TOKEN"] = token
 

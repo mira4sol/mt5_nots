@@ -203,6 +203,13 @@ def load_config(
     return AppConfig(settings=settings, accounts=accounts)
 
 
+def resolve_command_api_token(config: AppConfig | None = None) -> str:
+    """API token from settings.yaml + .env (same source as the running app)."""
+    if config is None:
+        config = load_config()
+    return config.settings.commands.api_token.strip()
+
+
 def apply_env_to_settings(settings: AppSettings) -> AppSettings:
     """Overlay HEALTH_* and command secrets from .env onto app settings."""
     updates: dict[str, Any] = {}
