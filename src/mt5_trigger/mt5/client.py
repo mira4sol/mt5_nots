@@ -248,6 +248,18 @@ class MT5Client:
         deals = self._mt5.history_deals_get()
         if deals is None:
             return []
+        return self._filter_exit_deals(deals)
+
+    def get_daily_closed_deals(self, day_start: datetime, day_end: datetime) -> list[ClosedDeal]:
+        self._ensure_connected()
+        self._mt5.history_select(day_start, day_end)
+        deals = self._mt5.history_deals_get()
+        if deals is None:
+            return []
+        return self._filter_exit_deals(deals)
+
+    @staticmethod
+    def _filter_exit_deals(deals: Any) -> list[ClosedDeal]:
         # Only exit deals (DEAL_ENTRY_OUT = 1)
         return [
             ClosedDeal(

@@ -226,6 +226,15 @@ make health
 # or open http://localhost:8080/health
 ```
 
+WhatsApp slash commands (`/positions`, `/tpd`, `/help`, etc.) and manual HTTP triggers are documented in **[docs/API.md](docs/API.md)** (deployed base URL: `http://204.168.148.205:8080/`).
+
+Enable live group commands:
+
+```bash
+make install-openclaw-hook   # wires OpenClaw → mt5_trigger webhook
+openclaw gateway           # restart gateway to load hook
+```
+
 ---
 
 ## Makefile reference
@@ -256,7 +265,7 @@ make health
 | `MT5_LOGIN` | Yes | Account number |
 | `MT5_PASSWORD` | Yes | **Investor** (read-only) password |
 | `MT5_SERVER` | Yes | Broker server name |
-| `WHATSAPP_TARGET` | Yes | E.164 phone (`+1...`) or group JID (`...@g.us`) |
+| `COMMAND_API_TOKEN` | Recommended | Protects `/api/commands` and WhatsApp webhook |
 | `MT5_BACKEND` | No | `auto` (default), `native`, `bridge`, or `mock` |
 | `MT5_BRIDGE_CLIENT` | No | `auto`, `mt5linux` (Linux VPS), or `mac-bridge` (Mac) |
 | `MT5_BRIDGE_HOST` | No | Default bridge host (per-account override in YAML) |
@@ -270,7 +279,7 @@ make health
 | `name` | Unique label for this account |
 | `login` / `password` / `server` | MT5 credentials (use `${ENV}` refs) |
 | `enabled` | `true` to monitor, `false` to skip |
-| `whatsapp_target` | Override recipient for this account |
+| `whatsapp_target` | WhatsApp group JID (`@g.us`) for this investor account — alerts and commands are scoped to this group |
 | `mt5_backend` | `auto`, `native`, `bridge`, or `mock` |
 | `bridge_client` | `auto`, `mt5linux`, or `mac-bridge` |
 | `bridge_host` | IP/hostname of MT5 bridge (`127.0.0.1` or VPS IP) |
@@ -286,6 +295,9 @@ make health
 | `openclaw_bin` | `openclaw` | Path to OpenClaw CLI |
 | `near_trigger.min_pips` | `12` | Min distance before near-trigger alert |
 | `near_trigger.spread_multiplier` | `3` | Adaptive threshold vs spread |
+| `commands.whatsapp_admins` | `[]` | E.164 numbers allowed to run commands |
+| `commands.api_token` | — | From `${COMMAND_API_TOKEN}` in `.env` |
+| `commands.cooldown_seconds` | `30` | Per-sender command cooldown |
 
 ---
 

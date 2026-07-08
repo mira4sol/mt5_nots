@@ -8,16 +8,14 @@ from typing import Any
 
 import uvicorn
 
-from mt5_trigger.config import AppConfig, enabled_accounts, load_config
-from mt5_trigger.market_hours import get_market_status, MarketHoursConfig
-from mt5_trigger.storage.db import init_db
-from mt5_trigger.storage.repository import EventRepository
+from mt5_trigger.api.app import create_app
+from mt5_trigger.config import AppConfig, enabled_accounts
+from mt5_trigger.runtime import reset_uptime
 from mt5_trigger.watcher.account_watcher import run_account_watcher
 
 logger = logging.getLogger(__name__)
 
 _processes: list[mp.Process] = []
-_start_time = time.time()
 
 
 def _start_watchers(config: AppConfig) -> list[mp.Process]:
@@ -51,8 +49,7 @@ def _shutdown(signum: int | None = None, frame: Any = None) -> None:
 
 
 def run_supervisor(config: AppConfig) -> None:
-    global _processes, _start_time
-    _start_time = time.time()
+    global _processes
 
     signal.signal(signal.SIGINT, _shutdown)
     signal.signal(signal.SIGTERM, _shutdown)
@@ -81,53 +78,9 @@ def run_supervisor(config: AppConfig) -> None:
         time.sleep(5)
 
 
-def get_uptime() -> float:
-    return time.time() - _start_time
-
-
-def create_health_app(config: AppConfig):
-    from fastapi import FastAPI
-
-    app = FastAPI(title="MT5 Trigger Monitor", version="0.1.0")
-    db_path = config.settings.db_path_resolved
-    conn = init_db(db_path)
-    repo = EventRepository(conn)
-    market_cfg = MarketHoursConfig(
-        rollover_blackout_minutes=config.settings.near_trigger.rollover_blackout_minutes,
-        daily_rollover_blackout_minutes=config.settings.near_trigger.daily_rollover_blackout_minutes,
-    )
-
-    @app.get("/health")
-    def health():
-        market = get_market_status(market_cfg)
-        statuses = repo.get_all_watcher_status()
-        account_map = {s["account"]: s for s in statuses}
-        accounts_info = []
-        for account in enabled_accounts(config):
-            s = account_map.get(account.name, {})
-            accounts_info.append(
-                {
-                    "name": account.name,
-                    "connected": bool(s.get("connected")),
-                    "last_poll_at": s.get("last_poll_at"),
-                    "last_error": s.get("last_error"),
-                }
-            )
-        all_ok = repo.ping()
-        return {
-            "status": "ok" if all_ok else "degraded",
-            "uptime_seconds": round(get_uptime()),
-            "market_open": market.is_open and not market.in_blackout,
-            "market_reason": market.reason,
-            "accounts": accounts_info,
-            "db_ok": all_ok,
-        }
-
-    return app
-
-
 def run_health_server(config: AppConfig) -> None:
-    app = create_health_app(config)
+    reset_uptime()
+    app = create_app(config)
     uvicorn.run(
         app,
         host=config.settings.health_host,

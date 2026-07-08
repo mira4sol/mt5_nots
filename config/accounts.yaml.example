@@ -4,19 +4,21 @@ accounts:
     password: "${MT5_PASSWORD}"
     server: "ValetaxGlobal-Live3"
     enabled: true
-    whatsapp_target: "${WHATSAPP_TARGET}"
+    whatsapp_target: "120363428584387160@g.us"
     mt5_backend: auto
     bridge_client: "${MT5_BRIDGE_CLIENT}"
     bridge_host: "${MT5_BRIDGE_HOST}"
     bridge_port: "${MT5_BRIDGE_PORT}"
     terminal_path: "${MT5_TERMINAL_PATH}"
 
-  # Add more accounts — one bridge_port / terminal per MT5 instance:
+  # Each investor group gets its own account + unique whatsapp_target group JID.
+  # Commands in a group only return data for the matching account.
   # - name: second_account
   #   login: "${MT5_LOGIN_2}"
   #   password: "${MT5_PASSWORD_2}"
   #   server: "Broker-Server"
   #   enabled: true
+  #   whatsapp_target: "120363999999999999@g.us"
   #   mt5_backend: bridge
   #   bridge_host: "10.0.0.5"
   #   bridge_port: 18814

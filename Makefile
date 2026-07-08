@@ -1,6 +1,6 @@
 .PHONY: help install install-dev install-prod install-native install-bridge install-linux setup \
         test test-whatsapp test-mt5 test-mt5-mock dev prod run health \
-        deploy deploy-prereqs pm2-start pm2-stop pm2-logs pm2-status
+        deploy deploy-prereqs pm2-start pm2-stop pm2-logs pm2-status install-openclaw-hook
 
 # Prefer venv python when present
 VENV      ?= .venv
@@ -38,6 +38,7 @@ help:
 	@echo "  make prod           Start monitor (uses .env / accounts.yaml)"
 	@echo "  make run            Alias for prod"
 	@echo "  make health         Curl local /health endpoint"
+	@echo "  make install-openclaw-hook  Wire WhatsApp group commands via OpenClaw"
 	@echo ""
 	@echo "Deploy (VPS):"
 	@echo "  make deploy         git pull, install deps, restart PM2"
@@ -105,6 +106,9 @@ health:
 	@curl -sf http://$(HEALTH_HOST):$(HEALTH_PORT)/health | python3 -m json.tool || \
 		(echo "Health endpoint not reachable at http://$(HEALTH_HOST):$(HEALTH_PORT)/health (make prod?)" && exit 1)
 
+install-openclaw-hook:
+	$(PYTHON) scripts/install_openclaw_hook.py
+
 # --- Deploy (VPS) ---
 
 deploy-prereqs:
@@ -118,6 +122,8 @@ deploy: $(VENV)/bin/activate deploy-prereqs
 	@git pull --ff-only $(GIT_REMOTE) || (echo "ERROR: git pull failed (merge conflict or no network?)" >&2; exit 1)
 	@echo "==> Installing/updating Python dependencies..."
 	@$(MAKE) install-prod
+	@echo "==> Installing OpenClaw WhatsApp command hook..."
+	@$(MAKE) install-openclaw-hook || echo "WARN: OpenClaw hook install skipped (openclaw missing or .env incomplete)"
 	@echo "==> Restarting PM2 ($(PM2_CONFIG))..."
 	@pm2 startOrRestart $(PM2_CONFIG)
 	@pm2 save 2>/dev/null || true

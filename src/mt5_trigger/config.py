@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 from pathlib import Path
@@ -14,6 +15,15 @@ CONFIG_DIR = PROJECT_ROOT / "config"
 DEFAULT_SETTINGS_PATH = CONFIG_DIR / "settings.yaml"
 DEFAULT_ACCOUNTS_PATH = CONFIG_DIR / "accounts.yaml"
 
+logger = logging.getLogger(__name__)
+
+
+def _normalize_phone(number: str) -> str:
+    number = strip_env_value(number)
+    if number and not number.startswith("+"):
+        return f"+{number}"
+    return number
+
 
 class NearTriggerSettings(BaseModel):
     min_pips: float = 12
@@ -27,6 +37,29 @@ class OpenClawSettings(BaseModel):
     retry_base_seconds: float = 2
 
 
+class CommandsSettings(BaseModel):
+    enabled: bool = True
+    api_token: str = ""
+    whatsapp_admins: list[str] = Field(default_factory=list)
+    cooldown_seconds: float = 30
+
+    @field_validator("whatsapp_admins", mode="before")
+    @classmethod
+    def parse_whatsapp_admins(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [_normalize_phone(n) for n in v.split(",") if n.strip()]
+        if isinstance(v, list):
+            return [_normalize_phone(str(n)) for n in v if str(n).strip()]
+        return v
+
+    @property
+    def whatsapp_admin_numbers(self) -> list[str]:
+        """Alias kept for existing call sites."""
+        return self.whatsapp_admins
+
+
 class AppSettings(BaseModel):
     poll_interval_seconds: float = 2
     health_host: str = "0.0.0.0"
@@ -35,6 +68,7 @@ class AppSettings(BaseModel):
     db_path: str = "data/mt5_trigger.db"
     near_trigger: NearTriggerSettings = Field(default_factory=NearTriggerSettings)
     openclaw: OpenClawSettings = Field(default_factory=OpenClawSettings)
+    commands: CommandsSettings = Field(default_factory=CommandsSettings)
 
     @field_validator("health_port", mode="before")
     @classmethod
@@ -170,7 +204,7 @@ def load_config(
 
 
 def apply_env_to_settings(settings: AppSettings) -> AppSettings:
-    """Overlay HEALTH_* from .env onto app settings (.env wins over settings.yaml)."""
+    """Overlay HEALTH_* and command secrets from .env onto app settings."""
     updates: dict[str, Any] = {}
     port = strip_env_value(os.environ.get("HEALTH_PORT", ""))
     if port:
@@ -178,9 +212,73 @@ def apply_env_to_settings(settings: AppSettings) -> AppSettings:
     host = strip_env_value(os.environ.get("HEALTH_HOST", ""))
     if host:
         updates["health_host"] = host
+
+    cmd_updates: dict[str, Any] = {}
+    api_token = strip_env_value(os.environ.get("COMMAND_API_TOKEN", ""))
+    if api_token:
+        cmd_updates["api_token"] = api_token
+    cooldown = strip_env_value(os.environ.get("COMMAND_COOLDOWN_SECONDS", ""))
+    if cooldown:
+        cmd_updates["cooldown_seconds"] = float(cooldown)
+    if cmd_updates:
+        updates["commands"] = settings.commands.model_copy(update=cmd_updates)
+
     if updates:
         return settings.model_copy(update=updates)
     return settings
+
+
+def command_group_jids(accounts: list[AccountConfig]) -> list[str]:
+    """Unique WhatsApp group JIDs configured on accounts."""
+    seen: set[str] = set()
+    groups: list[str] = []
+    for account in accounts:
+        target = account.whatsapp_target.strip()
+        if not target.endswith("@g.us") or target in seen:
+            continue
+        seen.add(target)
+        groups.append(target)
+    return groups
+
+
+def resolve_account_for_group(
+    config: AppConfig,
+    group_jid: str,
+) -> AccountConfig | None:
+    """Map inbound group JID to the investor account for that trading group."""
+    matches = [
+        a
+        for a in enabled_accounts(config)
+        if a.whatsapp_target.strip() == group_jid.strip()
+    ]
+    if not matches:
+        return None
+    if len(matches) > 1:
+        logger.warning(
+            "Multiple accounts share whatsapp_target %s; using %s",
+            group_jid,
+            matches[0].name,
+        )
+    return matches[0]
+
+
+def resolve_command_account(
+    config: AppConfig,
+    *,
+    account_name: str | None = None,
+    group_jid: str | None = None,
+) -> AccountConfig | None:
+    accounts = enabled_accounts(config)
+    if not accounts:
+        return None
+    if account_name:
+        matches = [a for a in accounts if a.name == account_name]
+        return matches[0] if matches else None
+    if group_jid:
+        return resolve_account_for_group(config, group_jid)
+    if len(accounts) == 1:
+        return accounts[0]
+    return None
 
 
 def apply_env_to_account(account: AccountConfig) -> AccountConfig:
