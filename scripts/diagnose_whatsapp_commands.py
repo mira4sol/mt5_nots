@@ -156,7 +156,7 @@ def main() -> int:
 
     if admins and group_jids:
         payload = {
-            "text": "/help",
+            "text": "/guide",
             "sender": admins[0],
             "group_jid": group_jids[0],
         }
@@ -169,12 +169,12 @@ def main() -> int:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
             ok &= _check(
-                "webhook /help test",
+                "webhook /guide test",
                 result.get("handled") is True,
                 json.dumps(result),
             )
         except urllib.error.URLError as exc:
-            ok &= _check("webhook /help test", False, str(exc))
+            ok &= _check("webhook /guide test", False, str(exc))
 
     try:
         proc = subprocess.run(

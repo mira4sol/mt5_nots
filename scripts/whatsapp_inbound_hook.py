@@ -27,7 +27,7 @@ def main() -> int:
     token = resolve_command_api_token(config)
 
     parser = argparse.ArgumentParser(description="POST WhatsApp inbound payload to mt5_trigger")
-    parser.add_argument("--text", default="/help", help="Message body (default: /help)")
+    parser.add_argument("--text", default="/guide", help="Message body (default: /guide)")
     parser.add_argument(
         "--sender",
         default=default_sender or None,

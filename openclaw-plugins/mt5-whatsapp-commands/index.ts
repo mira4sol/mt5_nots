@@ -3,54 +3,18 @@ import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import {
   accountForGroup,
   fetchMt5Command,
-  forwardSlashCommand,
   groupFromSessionKey,
   isAllowedAdmin,
   isAllowedGroup,
   normalizePhone,
   resolveConfig,
   resolveGroupJid,
-  type InboundMessage,
 } from "./forward.js";
-
-type MessageReceivedEvent = {
-  content?: string;
-  messageId?: string;
-  senderId?: string;
-  threadId?: string;
-  metadata?: Record<string, unknown>;
-};
-
-type MessageReceivedContext = {
-  channelId?: string;
-  sessionKey?: string;
-  senderId?: string;
-  messageId?: string;
-  threadId?: string;
-  pluginConfig?: Record<string, unknown>;
-  config?: PluginCommandContext["config"];
-};
-
-type BeforeDispatchEvent = {
-  content?: string;
-  body?: string;
-  channel?: string;
-  sessionKey?: string;
-  senderId?: string;
-};
-
-type BeforeDispatchContext = {
-  channelId?: string;
-  conversationId?: string;
-  sessionKey?: string;
-  senderId?: string;
-};
 
 type PluginCommandContext = {
   senderId?: string;
   channel?: string;
   channelId?: string;
-  isAuthorizedSender?: boolean;
   commandBody?: string;
   to?: string;
   from?: string;
@@ -72,10 +36,6 @@ type OpenClawApi = {
     requireAuth?: boolean;
     handler: (ctx: PluginCommandContext) => Promise<{ text: string }>;
   }) => void;
-  on: (
-    hook: string,
-    handler: (...args: unknown[]) => Promise<void | { handled: boolean; text?: string }>,
-  ) => void;
 };
 
 const PLUGIN_ID = "mt5-whatsapp-commands";
@@ -90,6 +50,7 @@ function pluginConfigFromContext(
 }
 
 const MT5_COMMANDS = [
+  { name: "guide", description: "List MT5 Trigger commands" },
   { name: "positions", description: "Open positions" },
   { name: "orders", description: "All pending orders" },
   { name: "nt", description: "Nearest pending trigger price" },
@@ -117,20 +78,6 @@ function resolveCommandGroup(ctx: PluginCommandContext): string {
     groupJid: to,
     sessionKey: ctx.sessionKey,
   });
-}
-
-function dispatchContext(
-  event: BeforeDispatchEvent,
-  ctx: BeforeDispatchContext,
-): PluginCommandContext {
-  return {
-    senderId: event.senderId ?? ctx.senderId,
-    from: event.senderId ?? ctx.senderId,
-    to: ctx.conversationId,
-    sessionKey: event.sessionKey ?? ctx.sessionKey,
-    channelId: ctx.channelId,
-    channel: event.channel,
-  };
 }
 
 export default definePluginEntry({
@@ -186,48 +133,5 @@ export default definePluginEntry({
           runRegisteredCommand(command.name, ctx),
       });
     }
-
-    // OpenClaw reserves /help — intercept before native dispatch.
-    api.on(
-      "before_dispatch",
-      async (event: BeforeDispatchEvent, ctx: BeforeDispatchContext) => {
-        const text = (event.content ?? event.body ?? "").trim();
-        if (!/^\/help\b/i.test(text)) {
-          return;
-        }
-        log(`before_dispatch /help sender=${event.senderId ?? ctx.senderId ?? "(unknown)"}`);
-        const result = await runRegisteredCommand("help", dispatchContext(event, ctx));
-        return { handled: true, text: result.text };
-      },
-    );
-
-    api.on("message_received", async (event: MessageReceivedEvent, ctx: MessageReceivedContext) => {
-      const config = resolveConfig(pluginConfigFromContext(ctx)) ?? baseConfig();
-      if (!config) {
-        return;
-      }
-
-      const metadata = {
-        ...(event.metadata ?? {}),
-        senderId: event.senderId ?? ctx.senderId,
-        chatId: event.threadId ?? ctx.threadId,
-      };
-
-      const message: InboundMessage = {
-        channelId: ctx.channelId,
-        content: event.content,
-        sender: event.senderId ?? ctx.senderId,
-        groupJid: event.threadId ?? ctx.threadId,
-        messageId: event.messageId ?? ctx.messageId,
-        sessionKey: ctx.sessionKey,
-      };
-
-      try {
-        await forwardSlashCommand(config, message, metadata, log);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        api.logger.error(`[mt5-whatsapp-commands] forward failed: ${msg}`);
-      }
-    });
   },
 });

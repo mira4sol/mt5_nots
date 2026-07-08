@@ -142,7 +142,7 @@ def _patch_config(
     internal["enabled"] = True
     internal_entries = internal.setdefault("entries", {})
     internal_entries[PLUGIN_ID] = {
-        "enabled": True,
+        "enabled": False,
         "env": hook_env,
     }
 

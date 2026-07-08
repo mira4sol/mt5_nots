@@ -4,7 +4,10 @@ from mt5_trigger.messages import format_money, format_price
 from mt5_trigger.mt5.client import OpenPosition, PendingOrder
 
 
-def help_message() -> str:
+ORDER_SEPARATOR = "────────────────"
+
+
+def guide_message() -> str:
     return (
         "MT5 Trigger commands:\n"
         "/positions — open positions\n"
@@ -13,8 +16,12 @@ def help_message() -> str:
         "/tpd — today's closed P/L\n"
         "/sld — stop-loss distance on open trades\n"
         "/cts — current trade status\n"
-        "/help — this list"
+        "/guide — this list"
     )
+
+
+def help_message() -> str:
+    return guide_message()
 
 
 def positions_message(positions: list[OpenPosition]) -> str:
@@ -38,10 +45,14 @@ def orders_message(orders: list[PendingOrder]) -> str:
     for o in orders:
         sl = format_price(o.sl) if o.sl > 0 else "none"
         tp = format_price(o.tp) if o.tp > 0 else "none"
-        lines.append(
-            f"#{o.ticket} {o.symbol} {o.order_type_label} "
-            f"vol={o.volume} price={format_price(o.price_open)} "
-            f"SL={sl} TP={tp}"
+        lines.extend(
+            [
+                ORDER_SEPARATOR,
+                f"#{o.ticket}  {o.symbol}",
+                f"{o.order_type_label}  ·  vol {o.volume}",
+                f"Price {format_price(o.price_open)}",
+                f"SL {sl}  ·  TP {tp}",
+            ]
         )
     return "\n".join(lines)
 

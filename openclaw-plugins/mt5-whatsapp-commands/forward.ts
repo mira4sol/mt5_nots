@@ -201,6 +201,39 @@ export function isWhatsAppChannel(channelId?: string): boolean {
   return normalized === "whatsapp" || normalized === "wa";
 }
 
+export const PLUGIN_HANDLED_COMMANDS = new Set([
+  "positions",
+  "orders",
+  "nt",
+  "close_price",
+  "tpd",
+  "sld",
+  "cts",
+  "guide",
+  "help",
+  "mt5help",
+]);
+
+export function normalizeSlashCommand(text: string): string | null {
+  const match = text.trim().match(/^\/([a-z0-9_-]+)\b/i);
+  if (!match) {
+    return null;
+  }
+  let cmd = match[1].toLowerCase().replace(/-/g, "_");
+  if (cmd === "close_price") {
+    cmd = "nt";
+  }
+  if (cmd === "help" || cmd === "mt5help") {
+    cmd = "guide";
+  }
+  return cmd;
+}
+
+export function isPluginHandledCommand(text: string): boolean {
+  const cmd = normalizeSlashCommand(text);
+  return cmd !== null && PLUGIN_HANDLED_COMMANDS.has(cmd);
+}
+
 export function phoneDigits(sender: string): string {
   return normalizePhone(sender).replace(/\D/g, "");
 }
@@ -305,6 +338,10 @@ export async function forwardSlashCommand(
 
   const text = (message.content ?? "").trim();
   if (!text.startsWith("/")) {
+    return false;
+  }
+  if (isPluginHandledCommand(text)) {
+    log?.(`skip webhook forward for plugin command ${text.split(/\s+/)[0]}`);
     return false;
   }
 

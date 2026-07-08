@@ -36,8 +36,9 @@ COMMAND_ALIASES: dict[str, str] = {
     "tpd": "tpd",
     "sld": "sld",
     "cts": "cts",
-    "help": "help",
-    "mt5help": "help",
+    "guide": "guide",
+    "help": "guide",
+    "mt5help": "guide",
 }
 
 COMMAND_PATTERN = re.compile(r"^/([a-z_-]+)\b", re.IGNORECASE)
@@ -246,8 +247,8 @@ class CommandService:
         )
 
     def _execute(self, command: str, account: AccountConfig) -> str:
-        if command == "help":
-            return cmd_format.help_message()
+        if command == "guide":
+            return cmd_format.guide_message()
         client = self._get_client(account)
         if command == "positions":
             return cmd_format.positions_message(client.get_positions())

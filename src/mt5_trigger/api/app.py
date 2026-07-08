@@ -13,13 +13,17 @@ from mt5_trigger.storage.db import init_db
 from mt5_trigger.storage.repository import EventRepository
 from mt5_trigger.runtime import get_uptime
 
-COMMAND_NAMES = frozenset({"help", "positions", "orders", "nt", "close_price", "tpd", "sld", "cts"})
+COMMAND_NAMES = frozenset(
+    {"guide", "help", "positions", "orders", "nt", "close_price", "tpd", "sld", "cts"}
+)
 
 
 def _normalize_command_name(command_name: str) -> str:
     normalized = command_name.lower().replace("-", "_")
     if normalized == "close_price":
         return "nt"
+    if normalized in {"help", "mt5help"}:
+        return "guide"
     return normalized
 
 

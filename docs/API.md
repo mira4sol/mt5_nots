@@ -22,7 +22,7 @@ Commands are scoped **per WhatsApp group**. Each account's `whatsapp_target` in 
 
 | Command | Description |
 |---------|-------------|
-| `/help` | List all commands |
+| `/guide` | List all commands |
 | `/positions` | Open positions |
 | `/orders` | All pending (open) orders |
 | `/nt` | Nearest pending trigger price and distance |
@@ -87,7 +87,7 @@ curl -H "X-API-Token: YOUR_TOKEN" \
 GET /api/commands/{command}?account={name}&send={true|false}&target={jid}
 ```
 
-Commands: `help`, `positions`, `orders`, `nt`, `close_price` (alias), `tpd`, `sld`, `cts`
+Commands: `guide`, `help` (alias), `positions`, `orders`, `nt`, `close_price` (alias), `tpd`, `sld`, `cts`
 
 `send` defaults to **`true`** (delivers to the account's `whatsapp_target` group). Use `send=false` to preview the message in JSON only.
 
@@ -112,8 +112,8 @@ curl "http://204.168.148.205:8080/api/commands/sld"
 # Current trade status
 curl "http://204.168.148.205:8080/api/commands/cts"
 
-# Help text
-curl "http://204.168.148.205:8080/api/commands/help"
+# Guide text
+curl "http://204.168.148.205:8080/api/commands/guide"
 ```
 
 Response:
@@ -234,7 +234,7 @@ GET http://127.0.0.1:8080/api/commands/positions?account=valetax_main
         ↓
 Plugin returns { text } → OpenClaw delivers to group
 
-Fallback: message_received → POST /webhooks/whatsapp/inbound (for /help etc.)
+Plugin `registerCommand` handles all slash commands (no webhook duplicate).
 ```
 
 ### One-time setup on the server
@@ -249,11 +249,11 @@ openclaw gateway restart
 
 This installs `openclaw-plugins/mt5-whatsapp-commands` which registers native
 slash commands (`/positions`, `/tpd`, etc.) via `api.registerCommand`, plus a
-webhook fallback for `/help`.
+webhook fallback for legacy paths only.
 
 enables `channels.whatsapp.pluginHooks.messageReceived`, and configures:
 
-- Native plugin commands: `/positions`, `/orders`, `/nt`, `/tpd`, `/sld`, `/cts`, `/help`
+- Native plugin commands: `/guide`, `/positions`, `/orders`, `/nt`, `/tpd`, `/sld`, `/cts`
 - Only from configured `whatsapp_target` group JIDs
 
 `make deploy` runs the hook install automatically.
@@ -268,7 +268,7 @@ openclaw plugins list | grep mt5-whatsapp-commands
 Then in the group (as an admin in `commands.whatsapp_admins`):
 
 ```text
-/help
+/guide
 /positions
 ```
 
@@ -366,5 +366,5 @@ accounts:
 | Today P/L | `GET http://204.168.148.205:8080/api/commands/tpd` |
 | SL distance | `GET http://204.168.148.205:8080/api/commands/sld` |
 | Trade status | `GET http://204.168.148.205:8080/api/commands/cts` |
-| Help | `GET http://204.168.148.205:8080/api/commands/help` |
+| Guide | `GET http://204.168.148.205:8080/api/commands/guide` |
 | WhatsApp inbound | `POST http://204.168.148.205:8080/webhooks/whatsapp/inbound` |

@@ -1,6 +1,6 @@
 poll_interval_seconds: 2
-health_host: "0.0.0.0"
-health_port: 8080  # override with HEALTH_PORT in .env
+health_host: '0.0.0.0'
+health_port: 8080 # override with HEALTH_PORT in .env
 openclaw_bin: 'openclaw'
 db_path: 'data/mt5_trigger.db'
 
@@ -19,6 +19,6 @@ commands:
   # SINGLE SOURCE OF TRUTH for who can run /positions, /help, etc.
   # make install-openclaw-hook syncs this list into OpenClaw + the plugin.
   whatsapp_admins:
-    - "+2349050273391"
-  cooldown_seconds: 30
+    - '+2349050273391'
+  cooldown_seconds: 10
   # api_token disabled temporarily — /api/commands and webhook are open
