@@ -8,12 +8,12 @@ def help_message() -> str:
     return (
         "MT5 Trigger commands:\n"
         "/positions — open positions\n"
-        "/close_price — nearest pending trigger price\n"
+        "/orders — all pending orders\n"
+        "/nt — nearest pending trigger price\n"
         "/tpd — today's closed P/L\n"
         "/sld — stop-loss distance on open trades\n"
         "/cts — current trade status\n"
-        "/help — this list\n"
-        "/mt5help — same list"
+        "/help — this list"
     )
 
 
@@ -27,6 +27,21 @@ def positions_message(positions: list[OpenPosition]) -> str:
             f"#{p.ticket} {p.symbol} {side} "
             f"vol={p.volume} open={format_price(p.price_open)} "
             f"P/L={format_money(p.profit)}"
+        )
+    return "\n".join(lines)
+
+
+def orders_message(orders: list[PendingOrder]) -> str:
+    if not orders:
+        return "No pending orders."
+    lines = [f"Pending orders ({len(orders)}):"]
+    for o in orders:
+        sl = format_price(o.sl) if o.sl > 0 else "none"
+        tp = format_price(o.tp) if o.tp > 0 else "none"
+        lines.append(
+            f"#{o.ticket} {o.symbol} {o.order_type_label} "
+            f"vol={o.volume} price={format_price(o.price_open)} "
+            f"SL={sl} TP={tp}"
         )
     return "\n".join(lines)
 

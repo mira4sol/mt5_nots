@@ -4,7 +4,7 @@ Base URL (deployed server):
 
 **http://204.168.148.205:8080/**
 
-All command endpoints support an optional `send=true` query parameter to deliver the response to WhatsApp via OpenClaw.
+All command endpoints **send to WhatsApp by default** (`send=true`). Pass `send=false` to return JSON only without delivering to the group.
 
 ## Authentication
 
@@ -24,7 +24,8 @@ Commands are scoped **per WhatsApp group**. Each account's `whatsapp_target` in 
 |---------|-------------|
 | `/help` | List all commands |
 | `/positions` | Open positions |
-| `/close_price` | Nearest pending order trigger price and distance |
+| `/orders` | All pending (open) orders |
+| `/nt` | Nearest pending trigger price and distance |
 | `/tpd` | Today's closed trade profit/loss (NY day) |
 | `/sld` | Stop-loss distance on open trades |
 | `/cts` | Current trade status with floating P/L |
@@ -86,38 +87,33 @@ curl -H "X-API-Token: YOUR_TOKEN" \
 GET /api/commands/{command}?account={name}&send={true|false}&target={jid}
 ```
 
-Commands: `help`, `positions`, `close_price`, `tpd`, `sld`, `cts`
+Commands: `help`, `positions`, `orders`, `nt`, `close_price` (alias), `tpd`, `sld`, `cts`
+
+`send` defaults to **`true`** (delivers to the account's `whatsapp_target` group). Use `send=false` to preview the message in JSON only.
 
 Examples:
 
 ```bash
-# Preview positions (no WhatsApp send)
-curl -H "X-API-Token: YOUR_TOKEN" \
-  "http://204.168.148.205:8080/api/commands/positions"
+# Pending orders → sent to WhatsApp by default
+curl "http://204.168.148.205:8080/api/commands/orders?account=valetax_main"
 
-# Run /positions and send result to that account's group (requires ?account= with multiple accounts)
-curl -H "X-API-Token: YOUR_TOKEN" \
-  "http://204.168.148.205:8080/api/commands/positions?account=valetax_main&send=true"
+# Open positions (preview only, no WhatsApp send)
+curl "http://204.168.148.205:8080/api/commands/positions?account=valetax_main&send=false"
 
-# Today's P/L for a specific account
-curl -H "X-API-Token: YOUR_TOKEN" \
-  "http://204.168.148.205:8080/api/commands/tpd?account=valetax_main&send=true"
+# Today's P/L for a specific account (sent to WhatsApp)
+curl "http://204.168.148.205:8080/api/commands/tpd?account=valetax_main"
 
 # Nearest pending trigger
-curl -H "X-API-Token: YOUR_TOKEN" \
-  "http://204.168.148.205:8080/api/commands/close_price?send=true"
+curl "http://204.168.148.205:8080/api/commands/nt"
 
 # Stop-loss distances
-curl -H "X-API-Token: YOUR_TOKEN" \
-  "http://204.168.148.205:8080/api/commands/sld?send=true"
+curl "http://204.168.148.205:8080/api/commands/sld"
 
 # Current trade status
-curl -H "X-API-Token: YOUR_TOKEN" \
-  "http://204.168.148.205:8080/api/commands/cts?send=true"
+curl "http://204.168.148.205:8080/api/commands/cts"
 
 # Help text
-curl -H "X-API-Token: YOUR_TOKEN" \
-  "http://204.168.148.205:8080/api/commands/help?send=true"
+curl "http://204.168.148.205:8080/api/commands/help"
 ```
 
 Response:
@@ -142,8 +138,8 @@ POST /api/commands/{command}?account={name}&send={true|false}&target={jid}
 Same behavior as GET. Useful for automation tools that prefer POST.
 
 ```bash
-curl -X POST -H "X-API-Token: YOUR_TOKEN" \
-  "http://204.168.148.205:8080/api/commands/positions?send=true"
+curl -X POST \
+  "http://204.168.148.205:8080/api/commands/positions?account=valetax_main"
 ```
 
 ---
@@ -156,9 +152,9 @@ Content-Type: application/json
 ```
 
 ```bash
-curl -X POST -H "X-API-Token: YOUR_TOKEN" \
+curl -X POST \
   -H "Content-Type: application/json" \
-  -d '{"command":"/positions","send":true,"account":"valetax_main"}' \
+  -d '{"command":"/orders","account":"valetax_main"}' \
   http://204.168.148.205:8080/api/commands/run
 ```
 
@@ -168,7 +164,7 @@ Body fields:
 |-------|------|-------------|
 | `command` | string | Command name with or without `/` |
 | `account` | string | Optional account from `accounts.yaml` |
-| `send` | boolean | Send response to WhatsApp (default `false`) |
+| `send` | boolean | Send response to WhatsApp (default `true`) |
 | `target` | string | Optional WhatsApp JID/phone override |
 
 ---
@@ -257,8 +253,7 @@ webhook fallback for `/help`.
 
 enables `channels.whatsapp.pluginHooks.messageReceived`, and configures:
 
-- Native plugin commands: `/positions`, `/close_price`, `/tpd`, `/sld`, `/cts`, `/mt5help`
-- Webhook fallback for `/help` and legacy paths
+- Native plugin commands: `/positions`, `/orders`, `/nt`, `/tpd`, `/sld`, `/cts`, `/help`
 - Only from configured `whatsapp_target` group JIDs
 
 `make deploy` runs the hook install automatically.
@@ -365,10 +360,11 @@ accounts:
 |--------|-----|
 | Health | `GET http://204.168.148.205:8080/health` |
 | List commands | `GET http://204.168.148.205:8080/api/commands` |
-| Positions | `GET http://204.168.148.205:8080/api/commands/positions?send=true` |
-| Close price | `GET http://204.168.148.205:8080/api/commands/close_price?send=true` |
-| Today P/L | `GET http://204.168.148.205:8080/api/commands/tpd?send=true` |
-| SL distance | `GET http://204.168.148.205:8080/api/commands/sld?send=true` |
-| Trade status | `GET http://204.168.148.205:8080/api/commands/cts?send=true` |
-| Help | `GET http://204.168.148.205:8080/api/commands/help?send=true` |
+| Positions | `GET http://204.168.148.205:8080/api/commands/positions` |
+| Pending orders | `GET http://204.168.148.205:8080/api/commands/orders` |
+| Nearest trigger | `GET http://204.168.148.205:8080/api/commands/nt` |
+| Today P/L | `GET http://204.168.148.205:8080/api/commands/tpd` |
+| SL distance | `GET http://204.168.148.205:8080/api/commands/sld` |
+| Trade status | `GET http://204.168.148.205:8080/api/commands/cts` |
+| Help | `GET http://204.168.148.205:8080/api/commands/help` |
 | WhatsApp inbound | `POST http://204.168.148.205:8080/webhooks/whatsapp/inbound` |

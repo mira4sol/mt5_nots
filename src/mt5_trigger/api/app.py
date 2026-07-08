@@ -13,7 +13,14 @@ from mt5_trigger.storage.db import init_db
 from mt5_trigger.storage.repository import EventRepository
 from mt5_trigger.runtime import get_uptime
 
-COMMAND_NAMES = ("help", "positions", "close_price", "tpd", "sld", "cts")
+COMMAND_NAMES = frozenset({"help", "positions", "orders", "nt", "close_price", "tpd", "sld", "cts"})
+
+
+def _normalize_command_name(command_name: str) -> str:
+    normalized = command_name.lower().replace("-", "_")
+    if normalized == "close_price":
+        return "nt"
+    return normalized
 
 
 class WhatsAppInbound(BaseModel):
@@ -27,7 +34,7 @@ class WhatsAppInbound(BaseModel):
 class CommandRunRequest(BaseModel):
     command: str
     account: str | None = None
-    send: bool = False
+    send: bool = True
     target: str | None = None
 
 
@@ -100,15 +107,15 @@ def create_app(config: AppConfig) -> FastAPI:
     def get_command(
         command_name: str,
         account: str | None = Query(default=None),
-        send: bool = Query(default=False),
+        send: bool = Query(default=True),
         target: str | None = Query(default=None),
         _: None = Depends(_auth),
     ):
-        normalized = command_name.lower().replace("-", "_")
-        if normalized not in COMMAND_NAMES:
+        raw = command_name.lower().replace("-", "_")
+        if raw not in COMMAND_NAMES:
             raise HTTPException(status_code=404, detail=f"Unknown command: {command_name}")
         result = command_service.run_command(
-            normalized,
+            _normalize_command_name(command_name),
             account_name=account,
             send=send,
             target=target,
@@ -119,7 +126,7 @@ def create_app(config: AppConfig) -> FastAPI:
     def post_command(
         command_name: str,
         account: str | None = Query(default=None),
-        send: bool = Query(default=False),
+        send: bool = Query(default=True),
         target: str | None = Query(default=None),
         _: None = Depends(_auth),
     ):
@@ -133,11 +140,11 @@ def create_app(config: AppConfig) -> FastAPI:
 
     @app.post("/api/commands/run")
     def run_command(body: CommandRunRequest, _: None = Depends(_auth)):
-        normalized = body.command.strip().lstrip("/").lower().replace("-", "_")
-        if normalized not in COMMAND_NAMES:
+        raw = body.command.strip().lstrip("/").lower().replace("-", "_")
+        if raw not in COMMAND_NAMES:
             raise HTTPException(status_code=400, detail=f"Unknown command: {body.command}")
         result = command_service.run_command(
-            normalized,
+            _normalize_command_name(raw),
             account_name=body.account,
             send=body.send,
             target=body.target,

@@ -31,6 +31,21 @@ type MessageReceivedContext = {
   config?: PluginCommandContext["config"];
 };
 
+type BeforeDispatchEvent = {
+  content?: string;
+  body?: string;
+  channel?: string;
+  sessionKey?: string;
+  senderId?: string;
+};
+
+type BeforeDispatchContext = {
+  channelId?: string;
+  conversationId?: string;
+  sessionKey?: string;
+  senderId?: string;
+};
+
 type PluginCommandContext = {
   senderId?: string;
   channel?: string;
@@ -48,6 +63,21 @@ type PluginCommandContext = {
   };
 };
 
+type OpenClawApi = {
+  logger: { info: (msg: string) => void; error: (msg: string) => void };
+  config?: PluginCommandContext["config"];
+  registerCommand: (def: {
+    name: string;
+    description: string;
+    requireAuth?: boolean;
+    handler: (ctx: PluginCommandContext) => Promise<{ text: string }>;
+  }) => void;
+  on: (
+    hook: string,
+    handler: (...args: unknown[]) => Promise<void | { handled: boolean; text?: string }>,
+  ) => void;
+};
+
 const PLUGIN_ID = "mt5-whatsapp-commands";
 
 function pluginConfigFromContext(
@@ -61,11 +91,11 @@ function pluginConfigFromContext(
 
 const MT5_COMMANDS = [
   { name: "positions", description: "Open positions" },
-  { name: "close_price", description: "Nearest pending trigger price" },
+  { name: "orders", description: "All pending orders" },
+  { name: "nt", description: "Nearest pending trigger price" },
   { name: "tpd", description: "Today's closed P/L" },
   { name: "sld", description: "Stop-loss distance on open trades" },
   { name: "cts", description: "Current trade status" },
-  { name: "help", description: "List MT5 Trigger commands" },
 ] as const;
 
 function resolveCommandSender(ctx: PluginCommandContext): string {
@@ -89,17 +119,33 @@ function resolveCommandGroup(ctx: PluginCommandContext): string {
   });
 }
 
+function dispatchContext(
+  event: BeforeDispatchEvent,
+  ctx: BeforeDispatchContext,
+): PluginCommandContext {
+  return {
+    senderId: event.senderId ?? ctx.senderId,
+    from: event.senderId ?? ctx.senderId,
+    to: ctx.conversationId,
+    sessionKey: event.sessionKey ?? ctx.sessionKey,
+    channelId: ctx.channelId,
+    channel: event.channel,
+  };
+}
+
 export default definePluginEntry({
   id: "mt5-whatsapp-commands",
   name: "MT5 WhatsApp Commands",
-  register(api) {
+  register(api: OpenClawApi) {
     const log = (line: string) => api.logger.info(`[mt5-whatsapp-commands] ${line}`);
+    const baseConfig = () =>
+      resolveConfig(pluginConfigFromContext({ config: api.config }));
 
     const runRegisteredCommand = async (
       command: string,
       ctx: PluginCommandContext,
     ): Promise<{ text: string }> => {
-      const config = resolveConfig(pluginConfigFromContext(ctx));
+      const config = resolveConfig(pluginConfigFromContext(ctx)) ?? baseConfig();
       if (!config) {
         return { text: "MT5 plugin not configured. Run: make install-openclaw-hook" };
       }
@@ -141,15 +187,22 @@ export default definePluginEntry({
       });
     }
 
-    api.registerCommand({
-      name: "mt5help",
-      description: "List MT5 Trigger commands (alias)",
-      requireAuth: false,
-      handler: async (ctx: PluginCommandContext) => runRegisteredCommand("help", ctx),
-    });
+    // OpenClaw reserves /help — intercept before native dispatch.
+    api.on(
+      "before_dispatch",
+      async (event: BeforeDispatchEvent, ctx: BeforeDispatchContext) => {
+        const text = (event.content ?? event.body ?? "").trim();
+        if (!/^\/help\b/i.test(text)) {
+          return;
+        }
+        log(`before_dispatch /help sender=${event.senderId ?? ctx.senderId ?? "(unknown)"}`);
+        const result = await runRegisteredCommand("help", dispatchContext(event, ctx));
+        return { handled: true, text: result.text };
+      },
+    );
 
     api.on("message_received", async (event: MessageReceivedEvent, ctx: MessageReceivedContext) => {
-      const config = resolveConfig(pluginConfigFromContext(ctx));
+      const config = resolveConfig(pluginConfigFromContext(ctx)) ?? baseConfig();
       if (!config) {
         return;
       }

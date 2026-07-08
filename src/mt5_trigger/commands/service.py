@@ -29,12 +29,15 @@ NY = ZoneInfo("America/New_York")
 
 COMMAND_ALIASES: dict[str, str] = {
     "positions": "positions",
-    "close_price": "close_price",
-    "close-price": "close_price",
+    "orders": "orders",
+    "nt": "nt",
+    "close_price": "nt",
+    "close-price": "nt",
     "tpd": "tpd",
     "sld": "sld",
     "cts": "cts",
     "help": "help",
+    "mt5help": "help",
 }
 
 COMMAND_PATTERN = re.compile(r"^/([a-z_-]+)\b", re.IGNORECASE)
@@ -248,8 +251,10 @@ class CommandService:
         client = self._get_client(account)
         if command == "positions":
             return cmd_format.positions_message(client.get_positions())
-        if command == "close_price":
-            return self._close_price(client)
+        if command == "orders":
+            return cmd_format.orders_message(client.get_pending_orders())
+        if command == "nt":
+            return self._nearest_trigger(client)
         if command == "tpd":
             return self._tpd(client)
         if command == "sld":
@@ -258,7 +263,7 @@ class CommandService:
             return cmd_format.cts_message(client.get_positions())
         raise ValueError(f"Unknown command: {command}")
 
-    def _close_price(self, client: MT5Client) -> str:
+    def _nearest_trigger(self, client: MT5Client) -> str:
         orders = client.get_pending_orders()
         if not orders:
             return cmd_format.close_price_message(None, None, None)
