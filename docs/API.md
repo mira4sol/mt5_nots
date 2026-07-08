@@ -232,11 +232,13 @@ After install, group slash commands work end-to-end:
 ```text
 Admin sends /positions in WhatsApp group
         ↓
-OpenClaw gateway (plugin message_received hook)
+OpenClaw plugin registerCommand (primary — bypasses LLM)
         ↓
-POST /webhooks/whatsapp/inbound
+GET http://127.0.0.1:8080/api/commands/positions?account=valetax_main
         ↓
-mt5_trigger runs command + replies to group
+Plugin returns { text } → OpenClaw delivers to group
+
+Fallback: message_received → POST /webhooks/whatsapp/inbound (for /help etc.)
 ```
 
 ### One-time setup on the server
@@ -249,12 +251,15 @@ make install-openclaw-hook
 openclaw gateway restart
 ```
 
-This installs `openclaw-plugins/mt5-whatsapp-commands` into `~/.openclaw/plugins/`,
-enables `channels.whatsapp.pluginHooks.messageReceived`, and forwards only:
+This installs `openclaw-plugins/mt5-whatsapp-commands` which registers native
+slash commands (`/positions`, `/tpd`, etc.) via `api.registerCommand`, plus a
+webhook fallback for `/help`.
 
-- WhatsApp channel messages
-- From any account `whatsapp_target` group JID in `config/accounts.yaml`
-- That start with `/`
+enables `channels.whatsapp.pluginHooks.messageReceived`, and configures:
+
+- Native plugin commands: `/positions`, `/close_price`, `/tpd`, `/sld`, `/cts`, `/mt5help`
+- Webhook fallback for `/help` and legacy paths
+- Only from configured `whatsapp_target` group JIDs
 
 `make deploy` runs the hook install automatically.
 

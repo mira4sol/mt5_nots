@@ -12,7 +12,8 @@ def help_message() -> str:
         "/tpd — today's closed P/L\n"
         "/sld — stop-loss distance on open trades\n"
         "/cts — current trade status\n"
-        "/help — this list"
+        "/help — this list\n"
+        "/mt5help — same list (OpenClaw plugin alias)"
     )
 
 

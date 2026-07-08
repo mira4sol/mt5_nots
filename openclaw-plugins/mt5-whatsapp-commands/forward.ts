@@ -1,6 +1,8 @@
-export type ForwardConfig = {
+export type PluginRuntimeConfig = {
+  apiBaseUrl: string;
   webhookUrl: string;
   groupJids: Set<string>;
+  accountsByGroup: Record<string, string>;
   apiToken?: string;
 };
 
@@ -18,9 +20,35 @@ function readEnv(key: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export function configFromEnv(): ForwardConfig | null {
+function parseGroupJids(raw: unknown): Set<string> {
+  const groupJids = new Set<string>();
+  if (Array.isArray(raw)) {
+    for (const jid of raw) {
+      if (typeof jid === "string" && jid.endsWith("@g.us")) {
+        groupJids.add(jid.trim());
+      }
+    }
+  }
+  return groupJids;
+}
+
+function parseAccountsByGroup(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object") {
+    return {};
+  }
+  const out: Record<string, string> = {};
+  for (const [jid, account] of Object.entries(raw)) {
+    if (jid.endsWith("@g.us") && typeof account === "string" && account.trim()) {
+      out[jid] = account.trim();
+    }
+  }
+  return out;
+}
+
+export function configFromEnv(): PluginRuntimeConfig | null {
   const webhookUrl = readEnv("MT5_TRIGGER_WEBHOOK_URL");
-  if (!webhookUrl) {
+  const apiBaseUrl = readEnv("MT5_TRIGGER_API_URL");
+  if (!webhookUrl && !apiBaseUrl) {
     return null;
   }
 
@@ -42,15 +70,17 @@ export function configFromEnv(): ForwardConfig | null {
 
   const apiToken = readEnv("COMMAND_API_TOKEN");
   return {
-    webhookUrl,
+    apiBaseUrl: apiBaseUrl || webhookUrl.replace(/\/webhooks\/whatsapp\/inbound\/?$/, ""),
+    webhookUrl: webhookUrl || `${apiBaseUrl}/webhooks/whatsapp/inbound`,
     groupJids,
+    accountsByGroup: {},
     apiToken: apiToken || undefined,
   };
 }
 
 export function configFromPlugin(
   pluginConfig: Record<string, unknown> | undefined,
-): ForwardConfig | null {
+): PluginRuntimeConfig | null {
   if (!pluginConfig) {
     return null;
   }
@@ -59,39 +89,38 @@ export function configFromPlugin(
     typeof pluginConfig.webhookUrl === "string"
       ? pluginConfig.webhookUrl.trim()
       : "";
-  if (!webhookUrl) {
+  const apiBaseUrl =
+    typeof pluginConfig.apiBaseUrl === "string"
+      ? pluginConfig.apiBaseUrl.trim()
+      : webhookUrl.replace(/\/webhooks\/whatsapp\/inbound\/?$/, "");
+
+  if (!apiBaseUrl) {
     return null;
   }
 
-  const groupJids = new Set<string>();
-  const rawJids = pluginConfig.groupJids;
-  if (Array.isArray(rawJids)) {
-    for (const jid of rawJids) {
-      if (typeof jid === "string" && jid.endsWith("@g.us")) {
-        groupJids.add(jid.trim());
-      }
-    }
-  }
-
+  const groupJids = parseGroupJids(pluginConfig.groupJids);
+  const accountsByGroup = parseAccountsByGroup(pluginConfig.accountsByGroup);
   const apiToken =
     typeof pluginConfig.apiToken === "string"
       ? pluginConfig.apiToken.trim()
       : undefined;
 
   return {
-    webhookUrl,
+    apiBaseUrl,
+    webhookUrl: webhookUrl || `${apiBaseUrl}/webhooks/whatsapp/inbound`,
     groupJids,
+    accountsByGroup,
     apiToken: apiToken || undefined,
   };
 }
 
 export function resolveConfig(
   pluginConfig?: Record<string, unknown>,
-): ForwardConfig | null {
+): PluginRuntimeConfig | null {
   return configFromPlugin(pluginConfig) ?? configFromEnv();
 }
 
-function groupFromSessionKey(sessionKey?: string): string {
+export function groupFromSessionKey(sessionKey?: string): string {
   const marker = ":whatsapp:group:";
   if (!sessionKey) {
     return "";
@@ -168,16 +197,51 @@ export function isAllowedGroup(groupJid: string, allowed: Set<string>): boolean 
   return allowed.has(groupJid);
 }
 
-export async function postInbound(
-  config: ForwardConfig,
-  payload: Record<string, unknown>,
-): Promise<void> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+export function accountForGroup(
+  groupJid: string,
+  config: PluginRuntimeConfig,
+): string | null {
+  return config.accountsByGroup[groupJid] ?? null;
+}
+
+function authHeaders(config: PluginRuntimeConfig): Record<string, string> {
+  const headers: Record<string, string> = {};
   if (config.apiToken) {
     headers["X-API-Token"] = config.apiToken;
   }
+  return headers;
+}
+
+export async function fetchMt5Command(
+  config: PluginRuntimeConfig,
+  command: string,
+  account: string,
+): Promise<string> {
+  const url = `${config.apiBaseUrl}/api/commands/${command}?account=${encodeURIComponent(account)}`;
+  const response = await fetch(url, { headers: authHeaders(config) });
+  const body = (await response.json()) as {
+    message?: string;
+    error?: string;
+    detail?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(body.detail || body.error || `mt5_trigger HTTP ${response.status}`);
+  }
+  if (body.error) {
+    throw new Error(body.error);
+  }
+  return body.message || "OK";
+}
+
+export async function postInbound(
+  config: PluginRuntimeConfig,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...authHeaders(config),
+  };
 
   const response = await fetch(config.webhookUrl, {
     method: "POST",
@@ -185,14 +249,17 @@ export async function postInbound(
     body: JSON.stringify(payload),
   });
 
+  const body = (await response.json()) as Record<string, unknown>;
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`mt5_trigger webhook ${response.status}: ${body}`);
+    throw new Error(
+      `mt5_trigger webhook ${response.status}: ${JSON.stringify(body)}`,
+    );
   }
+  return body;
 }
 
 export async function forwardSlashCommand(
-  config: ForwardConfig,
+  config: PluginRuntimeConfig,
   message: InboundMessage,
   metadata: Record<string, unknown> = {},
   log?: (line: string) => void,

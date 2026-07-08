@@ -108,7 +108,7 @@ test-openclaw-hook:
 	@test -e "$(TEST_OPENCLAW_HOME)/hooks/mt5-whatsapp-commands/handler.ts"
 	@test -e "$(TEST_OPENCLAW_HOME)/plugins/mt5-whatsapp-commands/index.ts"
 	@test -f "$(TEST_OPENCLAW_HOME)/openclaw.json" || test -f "$(TEST_OPENCLAW_HOME)/config.json"
-	@python3 -c "import json, pathlib; p=pathlib.Path('$(TEST_OPENCLAW_HOME)/openclaw.json'); c=json.loads(p.read_text()); assert c['channels']['whatsapp']['pluginHooks']['messageReceived'] is True; assert c['plugins']['entries']['mt5-whatsapp-commands']['enabled'] is True"
+	@python3 -c "import json, pathlib; p=pathlib.Path('$(TEST_OPENCLAW_HOME)/openclaw.json'); c=json.loads(p.read_text()); assert c['channels']['whatsapp']['pluginHooks']['messageReceived'] is True; assert c['plugins']['entries']['mt5-whatsapp-commands']['enabled'] is True; assert c['plugins']['entries']['mt5-whatsapp-commands']['config']['accountsByGroup']"
 	@echo "OpenClaw hook install test OK ($(TEST_OPENCLAW_HOME))"
 
 test-whatsapp-inbound:

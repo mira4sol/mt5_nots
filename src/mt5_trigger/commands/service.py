@@ -89,6 +89,16 @@ class CommandService:
         key = f"{_normalize_phone(sender) or sender}:{group_jid}"
         self._cooldowns[key] = time.time()
 
+    def _send_reply(
+        self,
+        *,
+        message: str,
+        account: AccountConfig,
+        target: str,
+    ) -> bool:
+        notifier = OpenClawNotifier(self.config.settings, target)
+        return notifier.send(message, target=target)
+
     def handle_inbound(
         self,
         *,
@@ -112,11 +122,28 @@ class CommandService:
             group_jid,
         )
         if not self.is_allowed_sender(sender):
-            logger.info("Ignoring command from non-admin sender %s", sender)
+            logger.warning("Ignoring command from non-admin sender %s", sender)
             return None
         if self.in_cooldown(sender, group_jid):
             logger.info("Cooldown active for sender %s in %s", sender, group_jid)
-            return None
+            account = resolve_command_account(
+                self.config,
+                account_name=account_name,
+                group_jid=group_jid,
+            )
+            if account is None:
+                return None
+            self._send_reply(
+                message="Please wait before sending another command.",
+                account=account,
+                target=group_jid,
+            )
+            return CommandResult(
+                command=command,
+                account=account.name,
+                message="Please wait before sending another command.",
+                sent=True,
+            )
 
         account = resolve_command_account(
             self.config,
@@ -133,7 +160,14 @@ class CommandService:
             send=True,
             target=group_jid,
         )
-        if result.error is None:
+        if result.error:
+            self._send_reply(
+                message=f"MT5 error: {result.error}",
+                account=account,
+                target=group_jid,
+            )
+            result.sent = True
+        elif result.error is None:
             self.mark_cooldown(sender, group_jid)
         return result
 
@@ -185,8 +219,14 @@ class CommandService:
                     message=message,
                     error="No whatsapp_target configured for account",
                 )
-            notifier = OpenClawNotifier(self.config.settings, dest)
-            sent = notifier.send(message, target=dest)
+            sent = self._send_reply(message=message, account=account, target=dest)
+            if not sent and message:
+                return CommandResult(
+                    command=command,
+                    account=account.name,
+                    message=message,
+                    error="Failed to send WhatsApp reply via OpenClaw",
+                )
 
         return CommandResult(
             command=command,

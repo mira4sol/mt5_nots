@@ -75,12 +75,30 @@ def _link_or_copy(source: Path, dest: Path) -> None:
             shutil.copy2(source, dest)
 
 
+def _api_base_url(config) -> str:
+    host = config.settings.health_host
+    port = config.settings.health_port
+    if host == "0.0.0.0":
+        host = "127.0.0.1"
+    return f"http://{host}:{port}"
+
+
+def _accounts_by_group(accounts, group_jids: list[str]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for account in accounts:
+        target = account.whatsapp_target.strip()
+        if target in group_jids:
+            mapping[target] = account.name
+    return mapping
+
+
 def _patch_config(
     config_path: Path,
     *,
     hook_env: dict[str, str],
     plugin_config: dict[str, object],
     group_jids: list[str],
+    admins: list[str],
 ) -> None:
     if config_path.exists():
         config = _load_json(config_path)
@@ -90,6 +108,11 @@ def _patch_config(
     channels = config.setdefault("channels", {})
     whatsapp = channels.setdefault("whatsapp", {})
     whatsapp["enabled"] = whatsapp.get("enabled", True)
+    if admins:
+        whatsapp.setdefault("groupPolicy", "allowlist")
+        existing_allow = whatsapp.get("groupAllowFrom")
+        if not existing_allow:
+            whatsapp["groupAllowFrom"] = admins
     plugin_hooks = whatsapp.setdefault("pluginHooks", {})
     plugin_hooks["messageReceived"] = True
 
@@ -118,6 +141,11 @@ def _patch_config(
         "enabled": True,
         "env": hook_env,
     }
+
+    if admins:
+        commands_oc = config.setdefault("commands", {})
+        allow_from = commands_oc.setdefault("allowFrom", {})
+        allow_from["whatsapp"] = admins
 
     _save_json(config_path, config)
 
@@ -160,13 +188,19 @@ def main() -> int:
         return 1
 
     webhook_url = _webhook_url(config)
+    api_base = _api_base_url(config)
+    admins = config.settings.commands.whatsapp_admins
+    accounts_by_group = _accounts_by_group(accounts, group_jids)
     hook_env = {
         "WHATSAPP_GROUP_JIDS": ",".join(group_jids),
         "MT5_TRIGGER_WEBHOOK_URL": webhook_url,
+        "MT5_TRIGGER_API_URL": api_base,
     }
     plugin_config: dict[str, object] = {
+        "apiBaseUrl": api_base,
         "webhookUrl": webhook_url,
         "groupJids": group_jids,
+        "accountsByGroup": accounts_by_group,
     }
     token = config.settings.commands.api_token.strip()
     if token:
@@ -186,10 +220,12 @@ def main() -> int:
         hook_env=hook_env,
         plugin_config=plugin_config,
         group_jids=group_jids,
+        admins=admins,
     )
 
     enable_hook = _run_openclaw("hooks", "enable", PLUGIN_ID)
     enable_plugin = _run_openclaw("plugins", "enable", PLUGIN_ID)
+    restart = _run_openclaw("gateway", "restart")
 
     print("Installed MT5 WhatsApp command bridge")
     print(f"  plugin     : {PLUGIN_DEST} ({plugin_method})")
@@ -201,7 +237,11 @@ def main() -> int:
             print(f"    {account.whatsapp_target} -> {account.name}")
     print(f"  webhook    : {webhook_url}")
     print("  whatsapp   : pluginHooks.messageReceived = true")
-    if enable_hook is None or enable_plugin is None:
+    if admins:
+        print(f"  admins     : {', '.join(admins)}")
+    if restart is not None and restart.returncode == 0:
+        print("  gateway    : restarted")
+    elif enable_hook is None or enable_plugin is None:
         print("")
         print("NOTE: openclaw CLI not found; config was patched manually.")
     print("")

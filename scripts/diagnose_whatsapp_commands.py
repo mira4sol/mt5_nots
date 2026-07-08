@@ -107,9 +107,29 @@ def main() -> int:
     )
     plugin_config = plugin_entry.get("config") or {}
     ok &= _check(
-        "plugin webhookUrl",
-        bool(str(plugin_config.get("webhookUrl", "")).strip()),
-        str(plugin_config.get("webhookUrl", "")),
+        "plugin apiBaseUrl",
+        bool(str(plugin_config.get("apiBaseUrl", "")).strip()),
+        str(plugin_config.get("apiBaseUrl", "")),
+    )
+    ok &= _check(
+        "plugin accountsByGroup",
+        bool(plugin_config.get("accountsByGroup")),
+        str(plugin_config.get("accountsByGroup", "")),
+    )
+
+    admins_cfg = ((openclaw_cfg.get("commands") or {}).get("allowFrom") or {}).get("whatsapp")
+    if admins:
+        ok &= _check(
+            "commands.allowFrom.whatsapp",
+            bool(admins_cfg),
+            str(admins_cfg or "missing"),
+        )
+
+    group_policy = whatsapp.get("groupPolicy")
+    ok &= _check(
+        "channels.whatsapp.groupPolicy",
+        group_policy in (None, "allowlist", "open"),
+        str(group_policy or "unset"),
     )
 
     plugin_dir = OPENCLAW_HOME / "plugins" / PLUGIN_ID
