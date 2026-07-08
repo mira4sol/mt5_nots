@@ -97,12 +97,28 @@ def get_market_status(
     )
 
 
+def should_send_trade_alerts(
+    cfg: MarketHoursConfig | None = None,
+    now: datetime | None = None,
+) -> bool:
+    """Near-trigger, triggered, and close alerts — only while FX market is open."""
+    status = get_market_status(cfg, now)
+    return status.is_open and not status.in_blackout
+
+
 def should_send_near_trigger_alerts(
     cfg: MarketHoursConfig | None = None,
     now: datetime | None = None,
 ) -> bool:
+    return should_send_trade_alerts(cfg, now)
+
+
+def should_send_weekly_summary(
+    cfg: MarketHoursConfig | None = None,
+    now: datetime | None = None,
+) -> bool:
     status = get_market_status(cfg, now)
-    return status.is_open and not status.in_blackout
+    return not status.is_open and status.reason == "market_closed_weekend"
 
 
 def week_start_for(now: datetime | None = None) -> str:

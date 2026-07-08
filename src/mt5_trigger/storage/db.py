@@ -34,6 +34,10 @@ CREATE TABLE IF NOT EXISTS position_state (
     open_price REAL NOT NULL,
     pending_ticket INTEGER,
     triggered_at TEXT NOT NULL,
+    position_type INTEGER NOT NULL DEFAULT 0,
+    volume REAL NOT NULL DEFAULT 0,
+    sl REAL NOT NULL DEFAULT 0,
+    tp REAL NOT NULL DEFAULT 0,
     PRIMARY KEY (account, ticket)
 );
 
@@ -53,10 +57,27 @@ CREATE TABLE IF NOT EXISTS watcher_status (
 """
 
 
+def _migrate_schema(conn: sqlite3.Connection) -> None:
+    columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(position_state)").fetchall()
+    }
+    additions = {
+        "position_type": "INTEGER NOT NULL DEFAULT 0",
+        "volume": "REAL NOT NULL DEFAULT 0",
+        "sl": "REAL NOT NULL DEFAULT 0",
+        "tp": "REAL NOT NULL DEFAULT 0",
+    }
+    for name, ddl in additions.items():
+        if name not in columns:
+            conn.execute(f"ALTER TABLE position_state ADD COLUMN {name} {ddl}")
+    conn.commit()
+
+
 def init_db(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    _migrate_schema(conn)
     conn.commit()
     return conn

@@ -24,7 +24,18 @@ Tick = namedtuple("Tick", ["bid", "ask"])
 SymbolInfo = namedtuple("SymbolInfo", ["point", "trade_mode"])
 Deal = namedtuple(
     "Deal",
-    ["ticket", "position_id", "symbol", "price", "profit", "swap", "commission", "time", "entry"],
+    [
+        "ticket",
+        "position_id",
+        "symbol",
+        "price",
+        "profit",
+        "swap",
+        "commission",
+        "time",
+        "entry",
+        "reason",
+    ],
 )
 
 

@@ -100,14 +100,33 @@ class EventRepository:
         symbol: str,
         open_price: float,
         pending_ticket: int | None,
+        *,
+        position_type: int = 0,
+        volume: float = 0.0,
+        sl: float = 0.0,
+        tp: float = 0.0,
     ) -> None:
         self.conn.execute(
             """
-            INSERT INTO position_state (account, ticket, symbol, open_price, pending_ticket, triggered_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO position_state (
+                account, ticket, symbol, open_price, pending_ticket, triggered_at,
+                position_type, volume, sl, tp
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(account, ticket) DO NOTHING
             """,
-            (account, ticket, symbol, open_price, pending_ticket, _utcnow()),
+            (
+                account,
+                ticket,
+                symbol,
+                open_price,
+                pending_ticket,
+                _utcnow(),
+                position_type,
+                volume,
+                sl,
+                tp,
+            ),
         )
         self.conn.commit()
 

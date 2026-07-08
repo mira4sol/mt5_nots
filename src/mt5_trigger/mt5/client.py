@@ -7,7 +7,11 @@ from typing import Any
 
 from mt5_trigger.config import AccountConfig, normalize_account_config
 from mt5_trigger.mt5.backend import (
+    ORDER_TYPE_BUY_LIMIT,
+    ORDER_TYPE_BUY_STOP,
     ORDER_TYPE_LABELS,
+    ORDER_TYPE_SELL_LIMIT,
+    ORDER_TYPE_SELL_STOP,
     PENDING_ORDER_TYPES,
     POSITION_TYPE_BUY,
     POSITION_TYPE_SELL,
@@ -57,6 +61,7 @@ class ClosedDeal:
     swap: float
     commission: float
     time: int
+    reason: int = 0
 
     @property
     def net_profit(self) -> float:
@@ -235,9 +240,24 @@ class MT5Client:
                 swap=d.swap,
                 commission=d.commission,
                 time=d.time,
+                reason=getattr(d, "reason", 0),
             )
             for d in deals
         ]
+
+    def get_recent_closed_positions(
+        self, since: datetime, until: datetime | None = None
+    ) -> dict[int, list[ClosedDeal]]:
+        """Exit deals grouped by position_id for recovery of missed close alerts."""
+        self._ensure_connected()
+        until = until or datetime.now()
+        deals = self._mt5.history_deals_get(since, until)
+        if deals is None:
+            return {}
+        grouped: dict[int, list[ClosedDeal]] = {}
+        for deal in self._filter_exit_deals(deals):
+            grouped.setdefault(deal.position_id, []).append(deal)
+        return grouped
 
     def get_weekly_closed_deals(self, week_start: datetime, week_end: datetime) -> list[ClosedDeal]:
         self._ensure_connected()
@@ -266,6 +286,7 @@ class MT5Client:
                 swap=d.swap,
                 commission=d.commission,
                 time=d.time,
+                reason=getattr(d, "reason", 0),
             )
             for d in deals
             if d.entry == 1
@@ -301,3 +322,24 @@ def distance_to_trigger(order: PendingOrder, tick: SymbolTick) -> float:
         return abs(order.price_open - ref)
     ref = tick.bid
     return abs(order.price_open - ref)
+
+
+def order_already_triggered(order: PendingOrder, tick: SymbolTick) -> bool:
+    """True when market price has already reached the pending order trigger level."""
+    if order.order_type == ORDER_TYPE_BUY_STOP:
+        return tick.ask >= order.price_open
+    if order.order_type == ORDER_TYPE_SELL_STOP:
+        return tick.bid <= order.price_open
+    if order.order_type == ORDER_TYPE_BUY_LIMIT:
+        return tick.ask <= order.price_open
+    if order.order_type == ORDER_TYPE_SELL_LIMIT:
+        return tick.bid >= order.price_open
+    return False
+
+
+def position_side_label(position_type: int) -> str:
+    return "BUY" if position_type == POSITION_TYPE_BUY else "SELL"
+
+
+DEAL_REASON_SL = 4
+DEAL_REASON_TP = 5

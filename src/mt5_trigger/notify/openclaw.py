@@ -40,7 +40,7 @@ class OpenClawNotifier:
                     cmd,
                     capture_output=True,
                     text=True,
-                    timeout=30,
+                    timeout=self.settings.openclaw.send_timeout_seconds,
                     check=False,
                 )
                 if result.returncode == 0:

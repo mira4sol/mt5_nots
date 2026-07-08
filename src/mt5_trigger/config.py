@@ -58,6 +58,7 @@ class NearTriggerSettings(BaseModel):
 class OpenClawSettings(BaseModel):
     max_retries: int = 3
     retry_base_seconds: float = 2
+    send_timeout_seconds: float = 10
 
 
 class CommandsSettings(BaseModel):
