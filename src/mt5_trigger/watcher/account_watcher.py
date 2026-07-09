@@ -366,6 +366,10 @@ class AccountWatcher:
         )
         self.repo.remove_tracked_position(self.account.name, ticket)
         if not recorded:
+            logger.debug(
+                "Close alert already recorded for position %s; skipping send",
+                ticket,
+            )
             return
 
         if not trade_alerts:

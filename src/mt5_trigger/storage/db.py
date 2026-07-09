@@ -54,6 +54,11 @@ CREATE TABLE IF NOT EXISTS watcher_status (
     last_poll_at TEXT,
     last_error TEXT
 );
+
+CREATE TABLE IF NOT EXISTS inbound_commands (
+    dedupe_key TEXT PRIMARY KEY,
+    processed_at TEXT NOT NULL
+);
 """
 
 

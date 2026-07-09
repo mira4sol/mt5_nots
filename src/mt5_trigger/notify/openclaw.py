@@ -1,13 +1,67 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import subprocess
+import threading
 import time
 from pathlib import Path
 
 from mt5_trigger.config import AppSettings
 
 logger = logging.getLogger(__name__)
+
+_SEND_LOCK = threading.Lock()
+_RECENT_SENDS: dict[str, float] = {}
+_SEND_DEDUPE_TTL_SECONDS = 120.0
+
+
+def _send_dedupe_key(
+    *,
+    dest: str,
+    message: str,
+    media_path: Path | None,
+    reply_to: str | None,
+) -> str:
+    payload = "|".join(
+        [
+            dest,
+            reply_to or "",
+            str(media_path) if media_path is not None else "",
+            message,
+        ]
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _recently_sent(key: str) -> bool:
+    now = time.time()
+    with _SEND_LOCK:
+        sent_at = _RECENT_SENDS.get(key)
+        if sent_at is None:
+            return False
+        if now - sent_at > _SEND_DEDUPE_TTL_SECONDS:
+            _RECENT_SENDS.pop(key, None)
+            return False
+        return True
+
+
+def _mark_sent(key: str) -> None:
+    now = time.time()
+    with _SEND_LOCK:
+        _RECENT_SENDS[key] = now
+        expired = [
+            cache_key
+            for cache_key, sent_at in _RECENT_SENDS.items()
+            if now - sent_at > _SEND_DEDUPE_TTL_SECONDS
+        ]
+        for cache_key in expired:
+            _RECENT_SENDS.pop(cache_key, None)
+
+
+def clear_send_dedupe_for_tests() -> None:
+    with _SEND_LOCK:
+        _RECENT_SENDS.clear()
 
 
 class OpenClawNotifier:
@@ -84,6 +138,20 @@ class OpenClawNotifier:
         if force_document:
             cmd.append("--force-document")
 
+        dedupe_key = _send_dedupe_key(
+            dest=dest,
+            message=message,
+            media_path=media_path,
+            reply_to=reply_to,
+        )
+        if _recently_sent(dedupe_key):
+            logger.info(
+                "Skipping duplicate WhatsApp send (target=%s reply_to=%s)",
+                dest,
+                reply_to or "-",
+            )
+            return True
+
         max_retries = self.settings.openclaw.max_retries
         base = self.settings.openclaw.retry_base_seconds
         kind = "media" if media_path is not None else "text"
@@ -99,6 +167,7 @@ class OpenClawNotifier:
                     check=False,
                 )
                 if result.returncode == 0:
+                    _mark_sent(dedupe_key)
                     logger.info(
                         "WhatsApp %s sent via OpenClaw (target=%s reply_to=%s)",
                         kind,
@@ -107,8 +176,20 @@ class OpenClawNotifier:
                     )
                     return True
                 last_detail = (result.stderr or result.stdout or "").strip()
+                logger.error(
+                    "OpenClaw send failed without retry (kind=%s, target=%s, "
+                    "reply_to=%s, timeout=%ss): %s",
+                    kind,
+                    dest,
+                    reply_to or "-",
+                    self.settings.openclaw.send_timeout_seconds,
+                    last_detail or "(no output)",
+                )
+                return False
+            except subprocess.TimeoutExpired as exc:
+                last_detail = str(exc)
                 logger.warning(
-                    "OpenClaw send failed (attempt %d/%d, kind=%s, target=%s, "
+                    "OpenClaw send timeout (attempt %d/%d, kind=%s, target=%s, "
                     "reply_to=%s, timeout=%ss): %s",
                     attempt + 1,
                     max_retries,
@@ -116,9 +197,9 @@ class OpenClawNotifier:
                     dest,
                     reply_to or "-",
                     self.settings.openclaw.send_timeout_seconds,
-                    last_detail or "(no output)",
+                    exc,
                 )
-            except (subprocess.SubprocessError, OSError) as exc:
+            except OSError as exc:
                 last_detail = str(exc)
                 logger.warning(
                     "OpenClaw send error (attempt %d/%d, kind=%s, target=%s, "

@@ -23,6 +23,8 @@ from mt5_trigger.mt5.client import (
     is_buy_order,
 )
 from mt5_trigger.notify.openclaw import OpenClawNotifier
+from mt5_trigger.storage.db import init_db
+from mt5_trigger.storage.repository import EventRepository
 
 logger = logging.getLogger(__name__)
 NY = ZoneInfo("America/New_York")
@@ -59,6 +61,48 @@ class CommandService:
         self.config = config
         self._cooldowns: dict[str, float] = {}
         self._clients: dict[str, MT5Client] = {}
+        db_path = config.settings.db_path_resolved
+        self._conn = init_db(db_path)
+        self._repo = EventRepository(self._conn)
+
+    @staticmethod
+    def _inbound_dedupe_key(
+        *,
+        message_id: str | None,
+        reply_to: str | None,
+        command: str,
+        target: str,
+        sender: str | None = None,
+        group_jid: str | None = None,
+    ) -> str | None:
+        delivery_id = (message_id or reply_to or "").strip()
+        if delivery_id:
+            return f"delivery:{delivery_id}:{command}:{target}"
+        if sender and group_jid:
+            return f"sender:{sender}:{group_jid}:{command}"
+        return None
+
+    def _claim_delivery(
+        self,
+        *,
+        message_id: str | None = None,
+        reply_to: str | None = None,
+        command: str,
+        target: str,
+        sender: str | None = None,
+        group_jid: str | None = None,
+    ) -> bool:
+        dedupe_key = self._inbound_dedupe_key(
+            message_id=message_id,
+            reply_to=reply_to,
+            command=command,
+            target=target,
+            sender=sender,
+            group_jid=group_jid,
+        )
+        if dedupe_key is None:
+            return True
+        return self._repo.claim_inbound_command(dedupe_key)
 
     def list_commands(self) -> list[str]:
         seen: set[str] = set()
@@ -231,6 +275,7 @@ class CommandService:
         send: bool = False,
         target: str | None = None,
         reply_to: str | None = None,
+        message_id: str | None = None,
     ) -> CommandResult:
         account = resolve_command_account(
             self.config,
@@ -284,6 +329,26 @@ class CommandService:
                     account=account.name,
                     message=message,
                     error="No whatsapp_target configured for account",
+                )
+            if not self._claim_delivery(
+                message_id=message_id,
+                reply_to=reply_to,
+                command=command,
+                target=dest,
+            ):
+                logger.info(
+                    "Skipping duplicate command delivery: command=%s target=%s "
+                    "reply_to=%s message_id=%s",
+                    command,
+                    dest,
+                    reply_to or "-",
+                    message_id or "-",
+                )
+                return CommandResult(
+                    command=command,
+                    account=account.name,
+                    message=message,
+                    sent=True,
                 )
             sent = self._send_reply(
                 message=message,

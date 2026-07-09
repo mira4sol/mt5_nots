@@ -231,7 +231,7 @@ def main() -> int:
         admins=admins,
     )
 
-    enable_hook = _run_openclaw("hooks", "enable", PLUGIN_ID)
+    enable_hook = _run_openclaw("hooks", "disable", PLUGIN_ID)
     enable_plugin = _run_openclaw("plugins", "enable", PLUGIN_ID)
     restart = _run_openclaw("gateway", "restart")
 

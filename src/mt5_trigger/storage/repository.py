@@ -211,3 +211,17 @@ class EventRepository:
             return True
         except sqlite3.Error:
             return False
+
+    def claim_inbound_command(self, dedupe_key: str) -> bool:
+        try:
+            self.conn.execute(
+                """
+                INSERT INTO inbound_commands (dedupe_key, processed_at)
+                VALUES (?, ?)
+                """,
+                (dedupe_key, _utcnow()),
+            )
+            self.conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False

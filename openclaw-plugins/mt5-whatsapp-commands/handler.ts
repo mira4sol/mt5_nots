@@ -1,6 +1,7 @@
 import {
   configFromEnv,
   forwardSlashCommand,
+  isPluginHandledCommand,
   type InboundMessage,
 } from "./forward.js";
 
@@ -34,6 +35,15 @@ export default async function handler(event: HookEvent): Promise<void> {
   }
 
   const context = event.context ?? {};
+  const text = (context.content ?? "").trim();
+  if (!text.startsWith("/")) {
+    return;
+  }
+  if (isPluginHandledCommand(text)) {
+    log(`skip plugin-handled command ${text} (registerCommand owns delivery)`);
+    return;
+  }
+
   const metadata = context.metadata ?? {};
   const message: InboundMessage = {
     channelId: context.channelId,

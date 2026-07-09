@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from mt5_trigger.commands.service import CommandService
 from mt5_trigger.config import AppConfig, AppSettings, CommandsSettings
@@ -86,10 +86,50 @@ def test_fetch_mt5_command_sends_with_reply_to() -> None:
     assert "suppressReply: true" in index_ts
 
 
-def test_run_command_send_failure_returns_sent_false_without_error() -> None:
-    from unittest.mock import patch
+def test_run_command_dedupes_reply_to_delivery(tmp_path) -> None:
+    from mt5_trigger.config import AccountConfig, AppConfig, AppSettings, CommandsSettings
 
-    from mt5_trigger.commands.service import CommandService
+    config = AppConfig(
+        settings=AppSettings(
+            commands=CommandsSettings(enabled=True),
+            db_path=str(tmp_path / "dedupe.db"),
+        ),
+        accounts=[
+            AccountConfig(
+                name="valetax_main",
+                login="1",
+                password="x",
+                server="MetaQuotes-Demo",
+                whatsapp_target="120363428584387160@g.us",
+            )
+        ],
+    )
+    service = CommandService(config)
+    account = config.accounts[0]
+
+    with patch.object(service, "_execute", return_value="No open positions."):
+        with patch.object(service, "_send_reply", return_value=True) as send_reply:
+            first = service.run_command(
+                "positions",
+                account_name=account.name,
+                send=True,
+                target=account.whatsapp_target,
+                reply_to="MSG-1",
+            )
+            second = service.run_command(
+                "positions",
+                account_name=account.name,
+                send=True,
+                target=account.whatsapp_target,
+                reply_to="MSG-1",
+            )
+
+    assert first.sent is True
+    assert second.sent is True
+    assert send_reply.call_count == 1
+
+
+def test_run_command_send_failure_returns_sent_false_without_error() -> None:
     from mt5_trigger.config import AccountConfig, AppConfig, AppSettings, CommandsSettings
 
     config = AppConfig(
@@ -114,11 +154,21 @@ def test_run_command_send_failure_returns_sent_false_without_error() -> None:
                 account_name=account.name,
                 send=True,
                 target=account.whatsapp_target,
+                reply_to="MSG-UNIQUE",
             )
 
     assert result.sent is False
     assert result.error is None
     assert result.message == "Open positions (0):"
+
+
+def test_internal_hook_skips_plugin_handled_commands() -> None:
+    handler_ts = (
+        __import__("pathlib").Path(__file__).resolve().parents[1]
+        / "openclaw-plugins/mt5-whatsapp-commands/handler.ts"
+    ).read_text(encoding="utf-8")
+    assert "isPluginHandledCommand" in handler_ts
+    assert "registerCommand owns delivery" in handler_ts
 
 
 def test_plugin_uses_message_cache() -> None:
@@ -138,6 +188,7 @@ def test_install_openclaw_hook_sets_reply_to_mode() -> None:
         / "scripts/install_openclaw_hook.py"
     ).read_text(encoding="utf-8")
     assert 'whatsapp["replyToMode"]' in install_py
+    assert '"disable", PLUGIN_ID' in install_py
 
 
 def test_orders_message_includes_symbol_price() -> None:
