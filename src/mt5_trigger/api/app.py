@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -12,6 +13,8 @@ from mt5_trigger.market_hours import MarketHoursConfig, get_market_status
 from mt5_trigger.storage.db import init_db
 from mt5_trigger.storage.repository import EventRepository
 from mt5_trigger.runtime import get_uptime
+
+logger = logging.getLogger(__name__)
 
 COMMAND_NAMES = frozenset(
     {
@@ -66,6 +69,13 @@ def create_app(config: AppConfig) -> FastAPI:
         daily_rollover_blackout_minutes=config.settings.near_trigger.daily_rollover_blackout_minutes,
     )
     command_service = CommandService(config)
+
+    @app.middleware("http")
+    async def log_command_requests(request, call_next):
+        path = request.url.path
+        if path.startswith(("/api/commands", "/webhooks/whatsapp")):
+            logger.info("HTTP %s %s", request.method, path)
+        return await call_next(request)
 
     def _auth() -> None:
         verify_api_token(config.settings)
@@ -128,6 +138,7 @@ def create_app(config: AppConfig) -> FastAPI:
         send: bool = Query(default=True),
         target: str | None = Query(default=None),
         reply_to: str | None = Query(default=None),
+        command_text: str | None = Query(default=None),
         _: None = Depends(_auth),
     ):
         raw = command_name.lower().replace("-", "_")
@@ -139,6 +150,7 @@ def create_app(config: AppConfig) -> FastAPI:
             send=send,
             target=target,
             reply_to=reply_to,
+            command_text=command_text,
         )
         return _command_response(result)
 
@@ -149,6 +161,7 @@ def create_app(config: AppConfig) -> FastAPI:
         send: bool = Query(default=True),
         target: str | None = Query(default=None),
         reply_to: str | None = Query(default=None),
+        command_text: str | None = Query(default=None),
         _: None = Depends(_auth),
     ):
         return get_command(
@@ -157,6 +170,7 @@ def create_app(config: AppConfig) -> FastAPI:
             send=send,
             target=target,
             reply_to=reply_to,
+            command_text=command_text,
             _=None,
         )
 
@@ -176,6 +190,12 @@ def create_app(config: AppConfig) -> FastAPI:
 
     @app.post("/webhooks/whatsapp/inbound")
     def whatsapp_inbound(body: WhatsAppInbound, _: None = Depends(_auth)):
+        logger.info(
+            "WhatsApp inbound from %s in %s: %r",
+            body.sender,
+            body.group_jid,
+            body.text[:80],
+        )
         result = command_service.handle_inbound(
             text=body.text,
             sender=body.sender,

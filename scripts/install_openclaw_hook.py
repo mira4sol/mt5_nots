@@ -10,14 +10,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from dotenv import dotenv_values
-
 from mt5_trigger.config import (
     command_group_jids,
     enabled_accounts,
     load_config,
     whatsapp_admin_variants,
 )
+from mt5_trigger.openclaw_sync import build_openclaw_patch, patch_openclaw_config
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SOURCE = PROJECT_ROOT / "openclaw-plugins" / "mt5-whatsapp-commands"
@@ -29,21 +28,6 @@ CONFIG_CANDIDATES = [
     OPENCLAW_HOME / "config.json",
 ]
 PLUGIN_ID = "mt5-whatsapp-commands"
-
-
-def _webhook_url(config) -> str:
-    explicit = os.environ.get("MT5_TRIGGER_WEBHOOK_URL", "").strip()
-    if not explicit:
-        env_path = PROJECT_ROOT / ".env"
-        if env_path.exists():
-            explicit = (dotenv_values(env_path).get("MT5_TRIGGER_WEBHOOK_URL") or "").strip()
-    if explicit:
-        return explicit
-    host = config.settings.health_host
-    port = config.settings.health_port
-    if host == "0.0.0.0":
-        host = "127.0.0.1"
-    return f"http://{host}:{port}/webhooks/whatsapp/inbound"
 
 
 def _find_config_path() -> Path:
@@ -78,81 +62,6 @@ def _link_or_copy(source: Path, dest: Path) -> None:
             shutil.copytree(source, dest)
         else:
             shutil.copy2(source, dest)
-
-
-def _api_base_url(config) -> str:
-    host = config.settings.health_host
-    port = config.settings.health_port
-    if host == "0.0.0.0":
-        host = "127.0.0.1"
-    return f"http://{host}:{port}"
-
-
-def _accounts_by_group(accounts, group_jids: list[str]) -> dict[str, str]:
-    mapping: dict[str, str] = {}
-    for account in accounts:
-        target = account.whatsapp_target.strip()
-        if target in group_jids:
-            mapping[target] = account.name
-    return mapping
-
-
-def _patch_config(
-    config_path: Path,
-    *,
-    hook_env: dict[str, str],
-    plugin_config: dict[str, object],
-    group_jids: list[str],
-    admins: list[str],
-) -> None:
-    if config_path.exists():
-        config = _load_json(config_path)
-    else:
-        config = {}
-
-    channels = config.setdefault("channels", {})
-    whatsapp = channels.setdefault("whatsapp", {})
-    whatsapp["enabled"] = whatsapp.get("enabled", True)
-    whatsapp["replyToMode"] = whatsapp.get("replyToMode", "first")
-    allow_variants = whatsapp_admin_variants(admins) if admins else []
-    if allow_variants:
-        whatsapp["groupPolicy"] = "allowlist"
-        whatsapp["groupAllowFrom"] = allow_variants
-    plugin_hooks = whatsapp.setdefault("pluginHooks", {})
-    plugin_hooks["messageReceived"] = True
-
-    for group_jid in group_jids:
-        groups = whatsapp.setdefault("groups", {})
-        group_entry = groups.setdefault(group_jid, {})
-        if "requireMention" not in group_entry:
-            group_entry["requireMention"] = False
-
-    plugins = config.setdefault("plugins", {})
-    entries = plugins.setdefault("entries", {})
-    entries[PLUGIN_ID] = {
-        "enabled": True,
-        "config": plugin_config,
-    }
-    load_paths = plugins.setdefault("load", {}).setdefault("paths", [])
-    plugin_path = str(PLUGIN_DEST)
-    if plugin_path not in load_paths:
-        load_paths.append(plugin_path)
-
-    hooks = config.setdefault("hooks", {})
-    internal = hooks.setdefault("internal", {})
-    internal["enabled"] = True
-    internal_entries = internal.setdefault("entries", {})
-    internal_entries[PLUGIN_ID] = {
-        "enabled": False,
-        "env": hook_env,
-    }
-
-    if allow_variants:
-        commands_oc = config.setdefault("commands", {})
-        allow_from = commands_oc.setdefault("allowFrom", {})
-        allow_from["whatsapp"] = allow_variants
-
-    _save_json(config_path, config)
 
 
 def _run_openclaw(*args: str) -> subprocess.CompletedProcess[str] | None:
@@ -192,28 +101,7 @@ def main() -> int:
         )
         return 1
 
-    webhook_url = _webhook_url(config)
-    api_base = _api_base_url(config)
-    admins = config.settings.commands.whatsapp_admins
-    allow_variants = whatsapp_admin_variants(admins)
-    accounts_by_group = _accounts_by_group(accounts, group_jids)
-    hook_env = {
-        "WHATSAPP_GROUP_JIDS": ",".join(group_jids),
-        "MT5_TRIGGER_WEBHOOK_URL": webhook_url,
-        "MT5_TRIGGER_API_URL": api_base,
-        "WHATSAPP_ADMINS": ",".join(admins),
-    }
-    plugin_config: dict[str, object] = {
-        "apiBaseUrl": api_base,
-        "webhookUrl": webhook_url,
-        "groupJids": group_jids,
-        "accountsByGroup": accounts_by_group,
-        "admins": admins,
-    }
-    token = config.settings.commands.api_token.strip()
-    if token:
-        hook_env["COMMAND_API_TOKEN"] = token
-        plugin_config["apiToken"] = token
+    hook_env, plugin_config, group_jids, admins = build_openclaw_patch(config)
 
     OPENCLAW_HOME.mkdir(parents=True, exist_ok=True)
     (OPENCLAW_HOME / "plugins").mkdir(parents=True, exist_ok=True)
@@ -223,13 +111,25 @@ def main() -> int:
     _link_or_copy(PLUGIN_SOURCE, HOOK_DEST)
 
     config_path = _find_config_path()
-    _patch_config(
-        config_path,
-        hook_env=hook_env,
-        plugin_config=plugin_config,
-        group_jids=group_jids,
-        admins=admins,
-    )
+    # Ensure plugin load path is present without wiping other plugin settings.
+    if config_path.exists():
+        openclaw_cfg = _load_json(config_path)
+    else:
+        openclaw_cfg = {}
+    plugins = openclaw_cfg.setdefault("plugins", {})
+    load_paths = plugins.setdefault("load", {}).setdefault("paths", [])
+    plugin_path = str(PLUGIN_DEST)
+    if plugin_path not in load_paths:
+        load_paths.append(plugin_path)
+        _save_json(config_path, openclaw_cfg)
+
+    allow_variants = whatsapp_admin_variants(admins)
+    webhook_url = str(plugin_config.get("webhookUrl", ""))
+
+    ok, sync_message = patch_openclaw_config(config=config, restart_gateway=False)
+    if not ok:
+        print(f"ERROR: {sync_message}", file=sys.stderr)
+        return 1
 
     enable_hook = _run_openclaw("hooks", "disable", PLUGIN_ID)
     enable_plugin = _run_openclaw("plugins", "enable", PLUGIN_ID)

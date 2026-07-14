@@ -82,8 +82,8 @@ def test_authorize_command_updates_config(tmp_path: Path) -> None:
         settings_path,
     ):
         with patch(
-            "mt5_trigger.commands.service.sync_openclaw_allowlist",
-            return_value="OpenClaw allowlist synced.",
+            "mt5_trigger.openclaw_sync.patch_openclaw_config",
+            return_value=(True, "OpenClaw config saved."),
         ):
             with patch.object(service, "_send_reply", return_value=True):
                 result = service.run_command(

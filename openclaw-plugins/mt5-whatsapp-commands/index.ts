@@ -8,7 +8,6 @@ import {
   isAllowedGroup,
   isWhatsAppChannel,
   normalizePhone,
-  postInbound,
   resolveConfig,
   resolveGroupJid,
 } from './forward.js'
@@ -217,23 +216,17 @@ export default definePluginEntry({
           `command /${command} sender=${sender} group=${groupJid} account=${account} replyTo=${replyTo || '(none)'}`,
         )
         if (ADMIN_COMMANDS.has(command)) {
-          const text = (ctx.commandBody ?? `/${command}`).trim()
-          const body = await postInbound(config, {
-            text,
-            sender,
-            group_jid: groupJid,
-            account,
-            message_id: replyTo,
+          const commandText = (ctx.commandBody ?? `/${command}`).trim()
+          const result = await fetchMt5Command(config, command, account, {
+            send: true,
+            replyTo,
+            target: groupJid,
+            commandText,
           })
-          if (body.error) {
-            return { text: String(body.error) }
+          if (!result.sent) {
+            return { text: result.message || 'Admin command failed.' }
           }
-          if (body.handled !== true) {
-            return { text: 'Admin command was not handled.' }
-          }
-          if (body.sent === false && body.message) {
-            return { text: String(body.message) }
-          }
+          log(`command /${command} delivered (${result.message.length} chars)`)
           return { suppressReply: true }
         }
         const result = await fetchMt5Command(config, command, account, {

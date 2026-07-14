@@ -2,13 +2,10 @@ from __future__ import annotations
 
 import logging
 import re
-import subprocess
-import sys
 from pathlib import Path
 
 from mt5_trigger.config import (
     DEFAULT_SETTINGS_PATH,
-    PROJECT_ROOT,
     _normalize_phone,
     phones_match,
 )
@@ -160,28 +157,12 @@ def remove_whatsapp_admin(
 
 
 def sync_openclaw_allowlist() -> str:
-    """Run install_openclaw_hook.py to refresh OpenClaw allowlists."""
-    script = PROJECT_ROOT / "scripts" / "install_openclaw_hook.py"
-    if not script.exists():
-        return "OpenClaw sync script missing; run make install-openclaw-hook manually."
+    """Patch OpenClaw allowlists on disk without restarting the gateway."""
+    from mt5_trigger.openclaw_sync import patch_openclaw_config
 
-    try:
-        proc = subprocess.run(
-            [sys.executable, str(script)],
-            cwd=str(PROJECT_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        logger.exception("OpenClaw allowlist sync failed")
-        return f"OpenClaw sync failed: {exc}"
-
-    if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "").strip()
-        logger.error("install_openclaw_hook failed: %s", detail)
-        return f"OpenClaw sync failed: {detail or 'unknown error'}"
-
-    logger.info("OpenClaw allowlist synced via install_openclaw_hook.py")
-    return "OpenClaw allowlist synced. Restart gateway if commands stay blocked."
+    ok, message = patch_openclaw_config(restart_gateway=False)
+    if not ok:
+        logger.error("OpenClaw allowlist sync failed: %s", message)
+        return message
+    logger.info("OpenClaw allowlist synced: %s", message)
+    return message
