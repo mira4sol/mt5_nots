@@ -213,6 +213,8 @@ export const PLUGIN_HANDLED_COMMANDS = new Set([
   "guide",
   "help",
   "mt5help",
+  "authorize",
+  "unauthorize",
 ]);
 
 export function normalizeSlashCommand(text: string): string | null {
@@ -239,6 +241,38 @@ export function phoneDigits(sender: string): string {
   return normalizePhone(sender).replace(/\D/g, "");
 }
 
+export function phoneDigitVariants(number: string): Set<string> {
+  let digits = number.trim().split("@", 1)[0]?.replace(/\D/g, "") ?? "";
+  const variants = new Set<string>();
+  if (!digits) {
+    return variants;
+  }
+  variants.add(digits);
+  if (digits.startsWith("234") && digits.length === 13) {
+    const local = digits.slice(3);
+    variants.add(local);
+    variants.add(`0${local}`);
+  } else if (digits.startsWith("0") && digits.length === 11 && "789".includes(digits[1] ?? "")) {
+    const local = digits.slice(1);
+    variants.add(local);
+    variants.add(`234${local}`);
+  } else if (digits.length === 10 && "789".includes(digits[0] ?? "")) {
+    variants.add(`234${digits}`);
+    variants.add(`0${digits}`);
+  }
+  return variants;
+}
+
+function phonesMatch(a: string, b: string): boolean {
+  const left = phoneDigitVariants(a);
+  for (const variant of phoneDigitVariants(b)) {
+    if (left.has(variant)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function isAllowedAdmin(sender: string | undefined, admins: string[]): boolean {
   if (!admins.length) {
     return true;
@@ -246,8 +280,7 @@ export function isAllowedAdmin(sender: string | undefined, admins: string[]): bo
   if (!sender?.trim()) {
     return false;
   }
-  const senderDigits = phoneDigits(sender);
-  return admins.some((admin) => phoneDigits(admin) === senderDigits);
+  return admins.some((admin) => phonesMatch(sender, admin));
 }
 
 export function isAllowedGroup(groupJid: string, allowed: Set<string>): boolean {

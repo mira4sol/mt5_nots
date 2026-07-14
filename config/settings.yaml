@@ -18,6 +18,7 @@ openclaw:
 commands:
   enabled: true
   # SINGLE SOURCE OF TRUTH for who can run /positions, /guide, etc.
+  # Admins can run /authorize +234... or /unauthorize +234... to update this list.
   # make install-openclaw-hook syncs this list into OpenClaw + the plugin.
   whatsapp_admins:
     - '+2349050273391'

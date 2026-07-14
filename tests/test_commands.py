@@ -3,7 +3,13 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from mt5_trigger.commands.service import CommandService
-from mt5_trigger.config import AppConfig, AppSettings, CommandsSettings
+from mt5_trigger.config import (
+    AppConfig,
+    AppSettings,
+    CommandsSettings,
+    phones_match,
+    whatsapp_admin_variants,
+)
 
 
 def _minimal_config() -> AppConfig:
@@ -237,3 +243,35 @@ def test_cts_message_includes_symbol_price() -> None:
     assert "XAUUSD.vx: bid 2650.00000 · ask 2650.20000" in message
     assert "now=2650.20000" in message
 
+
+def test_phones_match_nigerian_local_formats() -> None:
+    admin = "+2348134563699"
+    assert phones_match(admin, "8134563699")
+    assert phones_match(admin, "08134563699")
+    assert phones_match(admin, "2348134563699")
+    assert phones_match(admin, "+2348134563699")
+    assert not phones_match(admin, "+2349050273391")
+
+
+def test_whatsapp_admin_variants_include_local_digits() -> None:
+    variants = whatsapp_admin_variants(["+2348134563699"])
+    assert "+2348134563699" in variants
+    assert "8134563699" in variants
+    assert "08134563699" in variants
+    assert "2348134563699" in variants
+
+
+def test_is_allowed_sender_accepts_local_whatsapp_id() -> None:
+    config = AppConfig(
+        settings=AppSettings(
+            commands=CommandsSettings(
+                enabled=True,
+                whatsapp_admins=["+2348134563699"],
+            )
+        ),
+        accounts=[],
+    )
+    service = CommandService(config)
+    assert service.is_allowed_sender("8134563699")
+    assert service.is_allowed_sender("08134563699@s.whatsapp.net")
+    assert not service.is_allowed_sender("+2349050273391")

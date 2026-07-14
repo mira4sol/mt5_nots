@@ -15,7 +15,9 @@ from mt5_trigger.config import (
     command_group_jids,
     enabled_accounts,
     load_config,
+    phone_digit_variants,
     resolve_command_api_token,
+    whatsapp_admin_variants,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -123,12 +125,31 @@ def main() -> int:
     )
 
     admins_cfg = ((openclaw_cfg.get("commands") or {}).get("allowFrom") or {}).get("whatsapp")
+    group_allow_from = whatsapp.get("groupAllowFrom") or []
     if admins:
         ok &= _check(
             "commands.allowFrom.whatsapp",
             bool(admins_cfg),
             str(admins_cfg or "missing"),
         )
+        allow_set = {str(entry).strip() for entry in (admins_cfg or [])}
+        allow_set.update(str(entry).strip() for entry in group_allow_from)
+        missing_admins: list[str] = []
+        for admin in admins:
+            variants = whatsapp_admin_variants([admin])
+            if not any(variant in allow_set for variant in variants):
+                missing_admins.append(admin)
+        ok &= _check(
+            "each admin in OpenClaw allowlists",
+            not missing_admins,
+            (
+                "run: make install-openclaw-hook && openclaw gateway restart"
+                if missing_admins
+                else "all admins synced"
+            ),
+        )
+        for admin in missing_admins:
+            print(f"       missing: {admin} (variants: {', '.join(sorted(whatsapp_admin_variants([admin])))})")
 
     group_policy = whatsapp.get("groupPolicy")
     ok &= _check(

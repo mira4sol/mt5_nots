@@ -38,7 +38,11 @@ def guide_message() -> str:
         "/sld — stop-loss distance on open trades\n"
         "/cts — current trade status\n"
         "/chart — live XAUUSD M5 chart\n"
-        "/guide — this list"
+        "/guide — this list\n"
+        "\n"
+        "Admin only:\n"
+        "/authorize +234... — grant command access\n"
+        "/unauthorize +234... — revoke command access"
     )
 
 

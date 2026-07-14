@@ -34,17 +34,40 @@ def _phone_digits(number: str) -> str:
     return re.sub(r"\D", "", _normalize_phone(number))
 
 
+def phone_digit_variants(number: str) -> set[str]:
+    """Digit forms used for admin matching (E.164 + Nigerian local formats)."""
+    digits = re.sub(r"\D", "", strip_env_value(number).split("@", 1)[0])
+    if not digits:
+        return set()
+
+    variants: set[str] = {digits}
+    if digits.startswith("234") and len(digits) == 13:
+        local = digits[3:]
+        variants.update({local, f"0{local}"})
+    elif digits.startswith("0") and len(digits) == 11 and digits[1] in "789":
+        local = digits[1:]
+        variants.update({local, f"234{local}"})
+    elif len(digits) == 10 and digits[0] in "789":
+        variants.update({f"234{digits}", f"0{digits}"})
+    return variants
+
+
+def phones_match(a: str, b: str) -> bool:
+    """True when two phone identifiers refer to the same subscriber."""
+    return bool(phone_digit_variants(a) & phone_digit_variants(b))
+
+
 def whatsapp_admin_variants(admins: list[str]) -> list[str]:
     """Expand admin numbers for OpenClaw allowlists (E.164 + digits-only)."""
     seen: set[str] = set()
     out: list[str] = []
     for admin in admins:
         normalized = _normalize_phone(admin)
-        digits = _phone_digits(admin)
-        for variant in (normalized, f"+{digits}", digits):
-            if variant and variant not in seen:
-                seen.add(variant)
-                out.append(variant)
+        for digits in phone_digit_variants(admin):
+            for variant in (normalized, f"+{digits}", digits):
+                if variant and variant not in seen:
+                    seen.add(variant)
+                    out.append(variant)
     return out
 
 

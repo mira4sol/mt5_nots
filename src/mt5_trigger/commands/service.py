@@ -8,13 +8,20 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from mt5_trigger.commands import format as cmd_format
+from mt5_trigger.commands.admins import (
+    add_whatsapp_admin,
+    parse_admin_phone,
+    remove_whatsapp_admin,
+    sync_openclaw_allowlist,
+)
 from mt5_trigger.config import (
     AccountConfig,
     AppConfig,
     _normalize_phone,
-    _phone_digits,
     command_group_jids,
     enabled_accounts,
+    phone_digit_variants,
+    phones_match,
     resolve_command_account,
 )
 from mt5_trigger.mt5.client import (
@@ -42,7 +49,11 @@ COMMAND_ALIASES: dict[str, str] = {
     "guide": "guide",
     "help": "guide",
     "mt5help": "guide",
+    "authorize": "authorize",
+    "unauthorize": "unauthorize",
 }
+
+ADMIN_COMMANDS = frozenset({"authorize", "unauthorize"})
 
 COMMAND_PATTERN = re.compile(r"^/([a-z0-9_-]+)\b", re.IGNORECASE)
 
@@ -131,9 +142,8 @@ class CommandService:
         admins = self.config.settings.commands.whatsapp_admins
         if not admins:
             return True
-        sender_digits = _phone_digits(sender)
         for admin in admins:
-            if sender_digits and sender_digits == _phone_digits(admin):
+            if phones_match(sender, admin):
                 return True
             normalized = _normalize_phone(sender)
             if normalized in admins or sender in admins:
@@ -199,7 +209,11 @@ class CommandService:
             group_jid,
         )
         if not self.is_allowed_sender(sender):
-            logger.warning("Ignoring command from non-admin sender %s", sender)
+            logger.warning(
+                "Ignoring command from non-admin sender %s (digits=%s)",
+                sender,
+                ",".join(sorted(phone_digit_variants(sender))) or "-",
+            )
             return None
         if self.in_cooldown(sender, group_jid):
             logger.info("Cooldown active for sender %s in %s", sender, group_jid)
@@ -239,6 +253,8 @@ class CommandService:
             send=True,
             target=group_jid,
             reply_to=message_id,
+            command_text=text,
+            sender=sender,
         )
         if result.error:
             logger.error(
@@ -248,8 +264,9 @@ class CommandService:
                 group_jid,
                 result.error,
             )
+            prefix = "Error" if command in ADMIN_COMMANDS else "MT5 error"
             self._send_reply(
-                message=f"MT5 error: {result.error}",
+                message=f"{prefix}: {result.error}",
                 account=account,
                 target=group_jid,
                 reply_to=message_id,
@@ -276,7 +293,22 @@ class CommandService:
         target: str | None = None,
         reply_to: str | None = None,
         message_id: str | None = None,
+        command_text: str | None = None,
+        sender: str | None = None,
     ) -> CommandResult:
+        if command in ADMIN_COMMANDS:
+            return self._run_admin_command(
+                command,
+                command_text=command_text or "",
+                sender=sender or "",
+                account_name=account_name,
+                group_jid=group_jid,
+                send=send,
+                target=target,
+                reply_to=reply_to,
+                message_id=message_id,
+            )
+
         account = resolve_command_account(
             self.config,
             account_name=account_name,
@@ -388,6 +420,114 @@ class CommandService:
             ticks = {s: client.get_tick(s) for s in symbols}
             return cmd_format.cts_message(positions, ticks=ticks)
         raise ValueError(f"Unknown command: {command}")
+
+    def _run_admin_command(
+        self,
+        command: str,
+        *,
+        command_text: str,
+        sender: str,
+        account_name: str | None,
+        group_jid: str | None,
+        send: bool,
+        target: str | None,
+        reply_to: str | None,
+        message_id: str | None,
+    ) -> CommandResult:
+        account = resolve_command_account(
+            self.config,
+            account_name=account_name,
+            group_jid=group_jid,
+        )
+        if account is None:
+            return CommandResult(
+                command=command,
+                account=account_name or "",
+                message="",
+                error="No account mapped to this group",
+            )
+
+        phone = parse_admin_phone(command_text)
+        if phone is None:
+            usage = f"Usage: /{command} +234XXXXXXXXXX"
+            return CommandResult(
+                command=command,
+                account=account.name,
+                message=usage,
+                error=usage,
+            )
+
+        try:
+            if command == "authorize":
+                admins, added = add_whatsapp_admin(phone)
+                if not added:
+                    message = f"{phone} is already authorized."
+                else:
+                    sync_note = sync_openclaw_allowlist()
+                    message = f"Authorized {phone}. {sync_note}"
+            else:
+                current = self.config.settings.commands.whatsapp_admins
+                if not any(phones_match(phone, admin) for admin in current):
+                    message = f"{phone} is not in the admin list."
+                    admins = current
+                else:
+                    remaining = [
+                        admin for admin in current if not phones_match(phone, admin)
+                    ]
+                    if not remaining:
+                        error = "Cannot remove the last admin."
+                        return CommandResult(
+                            command=command,
+                            account=account.name,
+                            message=error,
+                            error=error,
+                        )
+                    _, removed = remove_whatsapp_admin(phone)
+                    admins = remaining
+                    sync_note = sync_openclaw_allowlist()
+                    message = f"Unauthorized {phone}. {sync_note}"
+            self.config.settings.commands.whatsapp_admins = admins
+        except Exception as exc:
+            logger.exception("Admin command %s failed", command)
+            return CommandResult(
+                command=command,
+                account=account.name,
+                message="",
+                error=str(exc),
+            )
+
+        sent = False
+        if send:
+            dest = target or account.whatsapp_target
+            if not dest:
+                return CommandResult(
+                    command=command,
+                    account=account.name,
+                    message=message,
+                    error="No whatsapp_target configured for account",
+                )
+            if self._claim_delivery(
+                message_id=message_id,
+                reply_to=reply_to,
+                command=command,
+                target=dest,
+            ):
+                sent = self._send_reply(
+                    message=message,
+                    account=account,
+                    target=dest,
+                    reply_to=reply_to,
+                    command=command,
+                )
+            else:
+                sent = True
+
+        return CommandResult(
+            command=command,
+            account=account.name,
+            message=message,
+            sent=sent,
+        )
 
     def _nearest_trigger(self, client: MT5Client) -> str:
         orders = client.get_pending_orders()

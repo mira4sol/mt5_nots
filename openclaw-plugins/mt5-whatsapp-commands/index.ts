@@ -8,6 +8,7 @@ import {
   isAllowedGroup,
   isWhatsAppChannel,
   normalizePhone,
+  postInbound,
   resolveConfig,
   resolveGroupJid,
 } from './forward.js'
@@ -95,7 +96,11 @@ const MT5_COMMANDS = [
   { name: 'sld', description: 'Stop-loss distance on open trades' },
   { name: 'cts', description: 'Current trade status' },
   { name: 'chart', description: 'Live XAUUSD M5 chart (image)' },
+  { name: 'authorize', description: 'Grant command access to a phone number' },
+  { name: 'unauthorize', description: 'Revoke command access from a phone number' },
 ] as const
+
+const ADMIN_COMMANDS = new Set(['authorize', 'unauthorize'])
 
 function resolveCommandSender(ctx: PluginCommandContext): string {
   const raw = ctx.senderId ?? ctx.from ?? ''
@@ -211,6 +216,26 @@ export default definePluginEntry({
         log(
           `command /${command} sender=${sender} group=${groupJid} account=${account} replyTo=${replyTo || '(none)'}`,
         )
+        if (ADMIN_COMMANDS.has(command)) {
+          const text = (ctx.commandBody ?? `/${command}`).trim()
+          const body = await postInbound(config, {
+            text,
+            sender,
+            group_jid: groupJid,
+            account,
+            message_id: replyTo,
+          })
+          if (body.error) {
+            return { text: String(body.error) }
+          }
+          if (body.handled !== true) {
+            return { text: 'Admin command was not handled.' }
+          }
+          if (body.sent === false && body.message) {
+            return { text: String(body.message) }
+          }
+          return { suppressReply: true }
+        }
         const result = await fetchMt5Command(config, command, account, {
           send: true,
           replyTo,
